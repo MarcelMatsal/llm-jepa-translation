@@ -1,4 +1,4 @@
-# Default configuration for Multilingual JEPA training
+# Default configuration template for Multilingual JEPA training
 
 # Model configuration
 model:
@@ -22,6 +22,6 @@ training:
 
 # Output configuration
 output:
-  save_dir: "./checkpoints"
+  save_dir: "./checkpoints"  # Or "./experiments/exp_001_wmt19_en_de"
   device: "cuda"  # auto-detected if "cuda"
 

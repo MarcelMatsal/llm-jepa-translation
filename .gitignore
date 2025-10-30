@@ -1,6 +1,11 @@
 venv/
 
+# Experiments (keep structure, ignore checkpoints/logs)
+experiments/*/checkpoint.pt
+experiments/*/logs/
+experiments/*/*.pt
+experiments/*/*.pth
+experiments/*/wandb/
+experiments/*/tensorboard/
+experiments/*/metrics.json
 
-# Experiments
-experiments/runs/
-experiments/results/

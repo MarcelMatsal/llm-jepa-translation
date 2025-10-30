@@ -8,8 +8,8 @@ Joint Embedding Predictive Architecture for multilingual sentence embeddings.
 # Install dependencies
 pip install -r requirements.txt
 
-# Train on translation dataset
-python scripts/train.py --config configs/default.yaml
+# Train (uses config.yaml in root, or specify another)
+python scripts/train.py --config config.yaml
 ```
 
 ## Architecture
@@ -22,9 +22,10 @@ python scripts/train.py --config configs/default.yaml
 ## Project Structure
 
 - `src/models/`: Model architectures (encoders, predictor, JEPA)
-- `src/data/`: Dataset loaders and processors
+- `src/data/`: WMT19 dataset loader
 - `src/training/`: Training loop and metrics
-- `configs/`: Configuration files
+- `experiments/`: Experimental results and outputs
 - `scripts/`: Training and evaluation scripts
+- `config.yaml`: Default config template
 
-See `IMPLEMENTATION_PLAN.md` for details.
+Configs are saved with each experiment automatically.
