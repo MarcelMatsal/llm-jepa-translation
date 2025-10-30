@@ -18,8 +18,8 @@ from src.training import Trainer, compute_metrics
 
 def main():
     parser = argparse.ArgumentParser(description='Train Multilingual JEPA')
-    parser.add_argument('--config', type=str, default='config.yaml',
-                       help='Path to config file (YAML, default: config.yaml)')
+    parser.add_argument('--config', type=str, required=True,
+                       help='Path to config file (YAML)')
     args = parser.parse_args()
     
     # Load config file

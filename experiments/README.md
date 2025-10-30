@@ -1,68 +1,44 @@
 # Experiments
 
-Storage directory for experimental results and outputs.
+Storage directory for experimental results.
 
-## What Goes Here
-
-After training, save your experiment results here:
+## Structure
 
 ```
 experiments/
-├── exp_001_wmt19_en_de/
-│   ├── checkpoint.pt      # Model weights (gitignored)
-│   ├── config.yaml        # Config used (auto-saved, can commit)
-│   └── notes.txt          # Your notes about results (optional)
-├── exp_002_wmt19_cs_en/
-│   └── ...
-└── README.md
+└── exp_test/
+    ├── checkpoint.pt      # Model weights
+    ├── config.yaml        # Config used (auto-saved)
+    └── notes.txt          # Your notes (optional)
 ```
 
-## How to Use
+## Usage
 
-**Option 1: Save directly to experiments**
-```yaml
-# Create a config file (e.g., exp_001_config.yaml)
-output:
-  save_dir: "./experiments/exp_001_wmt19_en_de"
-```
+### Run experiment
+
 ```bash
-python scripts/train.py --config exp_001_config.yaml
+python scripts/train.py --config experiments/exp_test/config.yaml
 ```
 
-**Option 2: Use default config, move after training**
-```bash
-python scripts/train.py --config config.yaml
-mv checkpoints experiments/exp_001_wmt19_en_de
-```
+### Create new experiment
 
-**Option 3: Copy config from previous experiment**
 ```bash
-cp experiments/exp_001/config.yaml exp_002_config.yaml
+# Copy config from previous experiment
+cp experiments/exp_test/config.yaml exp_002_config.yaml
+
 # Edit exp_002_config.yaml (change lang_pair, save_dir, etc.)
 python scripts/train.py --config exp_002_config.yaml
 ```
 
-## What Gets Saved Automatically
+### Evaluate
 
-When you train, these are saved automatically:
-- `checkpoint.pt` - Model weights and optimizer state (gitignored)
-- `config.yaml` - The config file used for training (can commit)
-
-## Optional: Save Metrics
-
-After evaluation, save metrics manually:
 ```bash
 python scripts/evaluate.py \
-    --checkpoint experiments/exp_001/checkpoint.pt \
-    --lang_pair en-de \
-    > experiments/exp_001/metrics.txt
+    --checkpoint experiments/exp_test/checkpoint.pt \
+    --lang_pair lt-en
 ```
 
-## Naming Experiments
+## What Gets Saved
 
-Use descriptive names:
-- `exp_001_wmt19_en_de_baseline`
-- `exp_002_wmt19_cs_en_attention_pool`
-- `exp_003_wmt19_fr_de_tau_0999`
-
-**Note**: Checkpoints (`.pt`, `.pth`) are gitignored, but you can commit `config.yaml` files and notes to track your experiments.
+- `checkpoint.pt` - Model weights (gitignored)
+- `config.yaml` - Config used (auto-saved, can commit)

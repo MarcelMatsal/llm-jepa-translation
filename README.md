@@ -1,31 +1,44 @@
-# Multilingual JEPA: Learning Aligned Embeddings Across Languages
+# Multilingual JEPA
 
-Joint Embedding Predictive Architecture for multilingual sentence embeddings.
+Joint Embedding Predictive Architecture for learning aligned sentence embeddings across languages.
 
-## Quick Start
+## Installation
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
+```
 
-# Train (uses config.yaml in root, or specify another)
-python scripts/train.py --config config.yaml
+## Usage
+
+### Train
+
+```bash
+python scripts/train.py --config experiments/exp_test/config.yaml
+```
+
+### Evaluate
+
+```bash
+python scripts/evaluate.py \
+    --checkpoint experiments/exp_test/checkpoint.pt \
+    --lang_pair lt-en
 ```
 
 ## Architecture
 
-- **Separate Encoders**: One encoder per language (x-encoder for source, y-encoder for target)
-- **EMA Updates**: y-encoder updated via Exponential Moving Average of x-encoder
+- **Separate encoders**: X-encoder (online) and Y-encoder (target, EMA-updated)
 - **Predictor**: Single language-conditioned predictor for all language pairs
-- **Bidirectional**: Trains both directions (lang1→lang2 and lang2→lang1)
+- **Bidirectional training**: Both directions (lang1→lang2 and lang2→lang1)
+- **WMT19 dataset**: Supports all WMT19 language pairs
 
 ## Project Structure
 
-- `src/models/`: Model architectures (encoders, predictor, JEPA)
-- `src/data/`: WMT19 dataset loader
-- `src/training/`: Training loop and metrics
-- `experiments/`: Experimental results and outputs
-- `scripts/`: Training and evaluation scripts
-- `config.yaml`: Default config template
+```
+src/
+├── models/          # JEPA model (encoders, predictor)
+├── data/            # WMT19 dataset loader
+└── training/         # Training loop and metrics
 
-Configs are saved with each experiment automatically.
+experiments/         # Experimental results and configs
+scripts/             # Training and evaluation scripts
+```
