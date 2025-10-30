@@ -59,7 +59,7 @@ def compute_metrics(model, test_loader, device='cuda'):
     except:
         linearity_error = float('inf')
     
-    # Singular values of difference (from paper)
+    # Singular values of difference (they use this in llm jepa, can talk to randall about this)
     diff = s_x - s_y
     U, S, V = torch.svd(diff)
     top_singular_values = S[:10].tolist()

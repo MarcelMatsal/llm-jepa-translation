@@ -1,1 +1,6 @@
 venv/
+
+
+# Experiments
+experiments/runs/
+experiments/results/

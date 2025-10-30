@@ -3,6 +3,11 @@ Evaluation script for Multilingual JEPA.
 """
 import argparse
 import torch
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from src.models import MultilingualJEPA
 from src.data import get_dataset, get_dataloader
 from src.training import compute_metrics
@@ -12,8 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description='Evaluate Multilingual JEPA')
     
     parser.add_argument('--checkpoint', type=str, required=True, help='Model checkpoint path')
-    parser.add_argument('--dataset', type=str, required=True, help='Dataset name')
-    parser.add_argument('--lang_pair', type=str, default='en-de', help='Language pair')
+    parser.add_argument('--lang_pair', type=str, required=True, help='Language pair (e.g., en-de)')
     parser.add_argument('--encoder_name', type=str, default='bert-base-multilingual-cased')
     parser.add_argument('--pooling', type=str, default='cls')
     parser.add_argument('--batch_size', type=int, default=32)
@@ -25,8 +29,9 @@ def main():
     lang_map = {'en': 0, 'fr': 1, 'de': 2, 'es': 3, 'it': 4, 'pt': 5, 'ru': 6, 'zh': 7, 'ja': 8}
     num_languages = len(set(lang_map.values()))
     
-    # Load dataset
-    test_dataset = get_dataset(args.dataset, args.lang_pair, lang_map, split='test')
+    # Load dataset (WMT19)
+    print(f'Loading WMT19 dataset: {args.lang_pair}')
+    test_dataset = get_dataset(args.lang_pair, lang_map, split='validation')
     test_loader = get_dataloader(test_dataset, batch_size=args.batch_size, shuffle=False)
     
     # Load model

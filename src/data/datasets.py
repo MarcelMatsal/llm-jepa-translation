@@ -1,20 +1,13 @@
 """
-Flexible dataset loaders for various HuggingFace translation datasets.
+Dataset loader for WMT19 translation dataset.
 """
-from typing import Dict, List, Optional, Tuple
-from datasets import Dataset, load_dataset
+from typing import Dict, List
+from datasets import load_dataset
 from torch.utils.data import Dataset as TorchDataset
 
 
 class TranslationDataset(TorchDataset):
-    """
-    Dataset for translation pairs with language IDs.
-    
-    Supports multiple formats:
-    - HuggingFace translation datasets (e.g., wmt19, opus_books)
-    - Custom JSONL with 'text_src', 'text_tgt', 'lang_src', 'lang_tgt'
-    - Any dataset with processor function
-    """
+    """Dataset for translation pairs with language IDs."""
     
     def __init__(
         self,
@@ -23,13 +16,6 @@ class TranslationDataset(TorchDataset):
         lang_src: List[int],
         lang_tgt: List[int]
     ):
-        """
-        Args:
-            texts_src: Source language texts
-            texts_tgt: Target language texts
-            lang_src: Source language IDs (mapped to integers)
-            lang_tgt: Target language IDs (mapped to integers)
-        """
         assert len(texts_src) == len(texts_tgt) == len(lang_src) == len(lang_tgt)
         self.texts_src = texts_src
         self.texts_tgt = texts_tgt
@@ -48,125 +34,59 @@ class TranslationDataset(TorchDataset):
         }
 
 
-def process_translation_dataset(
-    dataset: Dataset,
+def get_dataset(
     lang_pair: str,
     lang_map: Dict[str, int],
     split: str = 'train'
 ) -> TranslationDataset:
     """
-    Process HuggingFace translation dataset (e.g., wmt19, opus_books).
+    Load WMT19 translation dataset.
     
     Args:
-        dataset: HuggingFace Dataset object
-        lang_pair: Language pair like 'en-de' (source-target)
+        lang_pair: Language pair (e.g., 'en-de', 'cs-en')
         lang_map: Mapping from language codes to integer IDs
-        split: Dataset split ('train', 'validation', 'test')
+        split: Dataset split ('train' or 'validation')
     
     Returns:
         TranslationDataset
     """
+    # Load dataset from HuggingFace
+    dataset = load_dataset("wmt19", lang_pair)
+    
+    # Get split
     if split in dataset:
         split_dataset = dataset[split]
     else:
-        split_dataset = dataset['train']
+        raise ValueError(f"Split '{split}' not found in dataset. Available splits: {list(dataset.keys())}")
     
     lang_src_code, lang_tgt_code = lang_pair.split('-')
     
-    # Extract texts and language IDs
+    # Extract texts from translation dict
+    # WMT19 format: {"translation": {"cs": "...", "en": "..."}}
     texts_src = []
     texts_tgt = []
     lang_src_ids = []
     lang_tgt_ids = []
     
     for example in split_dataset:
-        text_src = example.get(lang_src_code, '')
-        text_tgt = example.get(lang_tgt_code, '')
+        translation = example['translation']
         
-        if text_src and text_tgt:  # Skip empty pairs
-            texts_src.append(text_src)
-            texts_tgt.append(text_tgt)
-            lang_src_ids.append(lang_map[lang_src_code])
-            lang_tgt_ids.append(lang_map[lang_tgt_code])
+        if not isinstance(translation, dict):
+            continue
+        
+        text_src = translation.get(lang_src_code, '')
+        text_tgt = translation.get(lang_tgt_code, '')
+        
+        if text_src and text_tgt:
+            texts_src.append(str(text_src))
+            texts_tgt.append(str(text_tgt))
+            lang_src_ids.append(lang_map.get(lang_src_code, 0))
+            lang_tgt_ids.append(lang_map.get(lang_tgt_code, 1))
+    
+    if len(texts_src) == 0:
+        raise ValueError(
+            f"No valid samples found for lang_pair {lang_pair}. "
+            f"Available languages in first example: {list(split_dataset[0]['translation'].keys()) if len(split_dataset) > 0 else 'empty dataset'}"
+        )
     
     return TranslationDataset(texts_src, texts_tgt, lang_src_ids, lang_tgt_ids)
-
-
-def process_custom_jsonl(
-    file_path: str,
-    lang_map: Dict[str, int],
-    text_src_key: str = 'text_src',
-    text_tgt_key: str = 'text_tgt',
-    lang_src_key: str = 'lang_src',
-    lang_tgt_key: str = 'lang_tgt'
-) -> TranslationDataset:
-    """
-    Process custom JSONL file.
-    
-    Args:
-        file_path: Path to JSONL file
-        lang_map: Mapping from language codes to integer IDs
-        text_src_key: Key for source text in JSON
-        text_tgt_key: Key for target text in JSON
-        lang_src_key: Key for source language in JSON
-        lang_tgt_key: Key for target language in JSON
-    
-    Returns:
-        TranslationDataset
-    """
-    import json
-    
-    texts_src = []
-    texts_tgt = []
-    lang_src_ids = []
-    lang_tgt_ids = []
-    
-    with open(file_path, 'r') as f:
-        for line in f:
-            example = json.loads(line)
-            texts_src.append(example[text_src_key])
-            texts_tgt.append(example[text_tgt_key])
-            lang_src_ids.append(lang_map[example[lang_src_key]])
-            lang_tgt_ids.append(lang_map[example[lang_tgt_key]])
-    
-    return TranslationDataset(texts_src, texts_tgt, lang_src_ids, lang_tgt_ids)
-
-
-def get_dataset(
-    dataset_name: str,
-    lang_pair: Optional[str] = None,
-    lang_map: Optional[Dict[str, int]] = None,
-    split: str = 'train',
-    processor_fn: Optional[callable] = None,
-    **kwargs
-) -> TranslationDataset:
-    """
-    Unified dataset loader supporting multiple formats.
-    
-    Args:
-        dataset_name: HuggingFace dataset name or path to JSONL file
-        lang_pair: Language pair (e.g., 'en-de') for HF datasets
-        lang_map: Language code to integer ID mapping
-        split: Dataset split
-        processor_fn: Custom processor function (dataset, **kwargs) -> TranslationDataset
-        **kwargs: Additional arguments passed to processor
-    
-    Returns:
-        TranslationDataset
-    """
-    # Default language mapping (English=0, French=1, German=2, etc.)
-    if lang_map is None:
-        lang_map = {'en': 0, 'fr': 1, 'de': 2, 'es': 3, 'it': 4, 'pt': 5, 'ru': 6, 'zh': 7, 'ja': 8}
-    
-    # Custom processor
-    if processor_fn is not None:
-        return processor_fn(dataset_name, lang_map=lang_map, split=split, **kwargs)
-    
-    # HuggingFace dataset
-    if dataset_name.endswith('.jsonl'):
-        return process_custom_jsonl(dataset_name, lang_map, **kwargs)
-    else:
-        # Load from HuggingFace
-        dataset = load_dataset(dataset_name, lang_pair, **kwargs)
-        return process_translation_dataset(dataset, lang_pair, lang_map, split)
-
