@@ -94,7 +94,7 @@ def load_and_prepare_dataset_translations(huggingface_dataset, language_pair, to
         if random_integer <= 5 and possibly_reverse:
             text_user, text_assistant = text_assistant, text_user
 
-                if predictors > 0:
+            if predictors > 0:
                 for i in range(1, predictors + 1):
                     if front_pred:
                         text_user = f"<|predictor_{i}|> " + text_user
@@ -126,7 +126,7 @@ def load_and_prepare_dataset_translations(huggingface_dataset, language_pair, to
             print("Assistant text:", text_assistant)
             print("Decoded user:", tokenizer.decode(tokenized_user["input_ids"]))
             print("Decoded assistant:", tokenizer.decode(tokenized_assistant["input_ids"]))
-            break
+            # break
 
 
         # Labels are masked out 
