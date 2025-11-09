@@ -41,7 +41,7 @@ export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # Parse command line arguments
-CHECKPOINT="${1:-experiments/exp_test/checkpoints/best_model}"
+CHECKPOINT="${1:-experiments/exp_test/checkpoints_small/best_model}"
 DEVICE="${2:-cuda}"
 
 echo "=========================================="
@@ -56,7 +56,7 @@ if [ ! -d "$CHECKPOINT" ]; then
     echo "❌ ERROR: Checkpoint directory not found: $CHECKPOINT"
     echo ""
     echo "Available checkpoints:"
-    ls -la experiments/exp_test/checkpoints/ 2>/dev/null || echo "  No checkpoints found"
+    ls -la experiments/exp_test/checkpoints_small/ 2>/dev/null || echo "  No checkpoints found"
     exit 1
 fi
 

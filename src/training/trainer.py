@@ -30,7 +30,8 @@ class DualObjectiveTrainer:
         log_interval: int = 100,
         save_dir: str = './checkpoints',
         accumulation_steps: int = 1,
-        use_wandb: bool = True
+        use_wandb: bool = True,
+        tokenizer = None
     ):
         """
         Args:
@@ -45,6 +46,7 @@ class DualObjectiveTrainer:
             save_dir: Directory to save checkpoints
             accumulation_steps: Gradient accumulation steps
             use_wandb: Whether to log to Weights & Biases
+            tokenizer: Tokenizer to save with model checkpoints (optional but recommended)
         """
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -55,6 +57,7 @@ class DualObjectiveTrainer:
         self.save_dir = save_dir
         self.accumulation_steps = accumulation_steps
         self.use_wandb = use_wandb
+        self.tokenizer = tokenizer
         
         # Create save directory
         os.makedirs(save_dir, exist_ok=True)
@@ -308,6 +311,10 @@ class DualObjectiveTrainer:
         model_dir = os.path.join(self.save_dir, filename.replace('.pt', ''))
         os.makedirs(model_dir, exist_ok=True)
         self.model.save_pretrained(model_dir)
+        
+        # Save tokenizer alongside model
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(model_dir)
         
         # Save to wandb as artifact (for best and final models)
         if self.use_wandb and wandb.run is not None:

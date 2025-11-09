@@ -9,9 +9,9 @@ experiments/*/wandb/
 experiments/*/tensorboard/
 experiments/*/metrics.json
 
-# scratch 
 scratch/*
 wandb/*
+logs/*
 
-downstream_tasks/*
 experiments/exp_test/*
+

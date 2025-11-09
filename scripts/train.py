@@ -173,7 +173,8 @@ def main(args):
         log_interval=config['training']['log_interval'],
         save_dir=config['output']['save_dir'],
         accumulation_steps=config['training'].get('accumulation_steps', 1),
-        use_wandb=use_wandb
+        use_wandb=use_wandb,
+        tokenizer=tokenizer
     )
     
     # Resume from checkpoint if specified
