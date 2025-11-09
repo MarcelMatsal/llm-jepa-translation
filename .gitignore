@@ -9,3 +9,5 @@ experiments/*/wandb/
 experiments/*/tensorboard/
 experiments/*/metrics.json
 
+# scratch 
+scratch/*
