@@ -1,6 +1,4 @@
-from .encoder import SentenceEncoder
-from .predictor import Predictor
-from .jepa import MultilingualJEPA
+from .bert_dual_objective import BertDualObjective
 
-__all__ = ['SentenceEncoder', 'Predictor', 'MultilingualJEPA']
+__all__ = ['BertDualObjective']
 

@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import XLMRobertaForMaskedLM, XLMRobertaModel
 from typing import Dict, Optional, Tuple
+import json
+
 
 
 class BertDualObjective(nn.Module):
@@ -336,7 +338,6 @@ class BertDualObjective(nn.Module):
         self.mlm_model.save_pretrained(save_directory)
         
         # Save additional config
-        import json
         config = {
             'lambda_alignment': self.lambda_alignment,
             'alignment_loss_type': self.alignment_loss_type
@@ -346,9 +347,7 @@ class BertDualObjective(nn.Module):
     
     @classmethod
     def from_pretrained(cls, load_directory: str):
-        """Load model from directory."""
-        import json
-        
+        """Load model from directory."""        
         # Load config
         with open(f"{load_directory}/dual_objective_config.json", 'r') as f:
             config = json.load(f)
