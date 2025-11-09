@@ -35,6 +35,7 @@ def main(args):
     use_wandb = config.get('wandb', {}).get('enabled', True) and not args.no_wandb
     if use_wandb:
         wandb.init(
+            entity=config.get('wandb', {}).get('entity', None),
             project=config.get('wandb', {}).get('project', 'llm-jepa-translation'),
             name=config.get('wandb', {}).get('run_name', None),
             config=config,

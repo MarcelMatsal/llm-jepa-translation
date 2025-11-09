@@ -13,5 +13,11 @@ scratch/*
 wandb/*
 logs/*
 
-experiments/exp_test/*
+checkpoints*
 
+
+
+
+__pycache__/*
+__pycache__
+*.pyc

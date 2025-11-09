@@ -1,0 +1,52 @@
+# Dual-Objective BERT Training Configuration - MEDIUM
+# Mid-size configuration for serious training runs
+
+# Model configuration
+model:
+  base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
+  lambda_alignment: 1.0  # Weight for alignment loss
+  alignment_loss_type: "cosine"  # Options: 'mse', 'cosine', 'contrastive'
+  mlm_probability: 0.15  # Masking probability for standard MLM
+
+# Dataset configuration
+data:
+  lang_pairs: ["de-en", "fr-en"]  # Two language pairs
+  batch_size: 16  # Standard batch size
+  max_length: 256  # Full sequence length
+  num_workers: 4  # DataLoader workers
+  max_examples_per_pair: 10000  # 10k examples per pair = 20k total
+  min_text_length: 10  # Minimum text length (characters)
+  max_text_length: 500  # Maximum text length (characters)
+
+# Training configuration
+training:
+  epochs: 5  # 5 epochs for meaningful training
+  learning_rate: 0.00002  # Initial learning rate (2e-5)
+  weight_decay: 0.01  # AdamW weight decay
+  warmup_steps: 500  # Linear warmup steps
+  max_grad_norm: 1.0  # Gradient clipping norm
+  log_interval: 100  # Logging frequency (steps)
+  save_every: 1  # Save checkpoint every epoch
+  accumulation_steps: 1  # No gradient accumulation (batch_size=16 is good)
+e
+# Output configuration
+output:
+  save_dir: "./experiments/exp_test/checkpoints_medium_cosine"
+  device: "cuda"  # 'cuda' or 'cpu'
+
+# Evaluation configuration (optional)
+evaluation:
+  eval_lang_pairs: ["de-en", "fr-en"]
+  eval_batch_size: 32
+  num_eval_batches: 10
+  retrieval_top_k: [1, 5, 10]
+
+# Weights & Biases configuration
+wandb:
+  enabled: true
+  entity: "makt_zgls"
+  project: "llm-jepa-translation"
+  run_name: "medium-cosine-2lang-10k-5ep"
+  tags: ["xlm-roberta-base", "dual-objective", "de-en", "fr-en", "medium"]
+  notes: "Medium training run: 2 languages, 10k examples per pair, 5 epochs"
+

@@ -43,6 +43,7 @@ evaluation:
 # Weights & Biases configuration
 wandb:
   enabled: true
+  entity: "makt_zgls"
   project: "llm-jepa-translation"
   run_name: null  # Auto-generated if null
   tags: ["xlm-roberta-base", "dual-objective", "de-en", "fr-en", "cs-en"]
