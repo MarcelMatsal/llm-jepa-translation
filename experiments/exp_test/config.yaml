@@ -1,27 +1,41 @@
-# Test experiment configuration
+# Dual-Objective BERT Training Configuration
 
 # Model configuration
 model:
-  encoder_name: "bert-base-multilingual-cased"
-  pooling: "cls"  # cls, mean, or attention
-  num_languages: 9
-  tau: 0.999  # EMA decay rate
+  base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
+  lambda_alignment: 1.0  # Weight for alignment loss (lambda in L_total = L_mlm + lambda * L_align)
+  alignment_loss_type: "mse"  # Options: 'mse', 'cosine', 'contrastive'
+  mlm_probability: 0.15  # Masking probability for standard MLM
 
-# Dataset configuration (WMT19 only)
+# Dataset configuration
 data:
-  lang_pair: "lt-en"  # Language pair for testing
-  batch_size: 4  # Small batch for testing
-  num_workers: 0
+  lang_pairs: ["de-en", "fr-en", "cs-en"]  # Language pairs for mixed batching
+  batch_size: 16  # Batch size per GPU
+  max_length: 256  # Maximum sequence length
+  num_workers: 4  # DataLoader workers
+  max_examples_per_pair: null  # Limit examples per language pair (null = no limit)
+  min_text_length: 10  # Minimum text length (characters)
+  max_text_length: 500  # Maximum text length (characters)
 
 # Training configuration
 training:
-  epochs: 1  # Single epoch for quick test
-  learning_rate: 1e-4
-  max_grad_norm: 1.0
-  log_interval: 10  # More frequent logging for testing
+  epochs: 10  # Number of training epochs
+  learning_rate: 2e-5  # Initial learning rate
+  weight_decay: 0.01  # AdamW weight decay
+  warmup_steps: 1000  # Linear warmup steps
+  max_grad_norm: 1.0  # Gradient clipping norm
+  log_interval: 100  # Logging frequency (steps)
+  save_every: 1  # Save checkpoint every N epochs
+  accumulation_steps: 1  # Gradient accumulation steps (effective_batch = batch_size * accumulation_steps)
 
 # Output configuration
 output:
-  save_dir: "./experiments/exp_test"
-  device: "cuda"  # auto-detected if "cuda"
+  save_dir: "./experiments/exp_test/checkpoints"
+  device: "cuda"  # 'cuda' or 'cpu' (auto-detected if cuda available)
 
+# Evaluation configuration (optional)
+evaluation:
+  eval_lang_pairs: ["de-en", "fr-en"]  # Language pairs for evaluation
+  eval_batch_size: 32
+  num_eval_batches: 10  # Number of batches for discrimination tests
+  retrieval_top_k: [1, 5, 10]  # Top-k values for retrieval accuracy

@@ -1,147 +1,196 @@
 """
-Main training script for Multilingual JEPA.
-Uses YAML config files for all configuration.
+Training script for dual-objective BERT model.
+Loads configuration, creates model and data loaders, and trains the model.
 """
-import argparse
-import torch
-import os
 import sys
-
-# Add parent directory to path
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from omegaconf import OmegaConf
-from src.models import MultilingualJEPA
-from src.data import get_dataset, get_dataloader
-from src.training import Trainer, compute_metrics
+import yaml
+import torch
+from torch.utils.data import DataLoader
+from transformers import XLMRobertaTokenizer, get_linear_schedule_with_warmup
+import argparse
+
+from src.models.bert_dual_objective import BertDualObjective
+from src.data.datasets import load_multilingual_dataset
+from src.data.collators import DualObjectiveCollator, SimpleCollator
+from src.training.trainer import DualObjectiveTrainer
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Train Multilingual JEPA')
-    parser.add_argument('--config', type=str, required=True,
-                       help='Path to config file (YAML)')
-    args = parser.parse_args()
+def load_config(config_path: str) -> dict:
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def main(args):
+    # Load configuration
+    print(f"Loading configuration from {args.config}")
+    config = load_config(args.config)
     
-    # Load config file
-    if not os.path.exists(args.config):
-        raise FileNotFoundError(f"Config file not found: {args.config}")
-    
-    print(f'Loading config from {args.config}')
-    cfg = OmegaConf.load(args.config)
-    
-    # Validate required config
-    if cfg.data.lang_pair is None:
-        raise ValueError("Language pair must be specified in config file")
-    
-    # Print config
-    print('\n' + '=' * 60)
-    print('Configuration:')
-    print('=' * 60)
-    print(OmegaConf.to_yaml(cfg))
-    print('=' * 60 + '\n')
-    
-    # Device
-    device = cfg.output.device
+    # Set device
+    device = config['output']['device']
     if device == 'cuda' and not torch.cuda.is_available():
-        print('Warning: CUDA not available, using CPU')
+        print("CUDA not available, using CPU")
         device = 'cpu'
+    print(f"Using device: {device}")
     
-    # Language mapping
-    lang_map = {'en': 0, 'fr': 1, 'de': 2, 'es': 3, 'it': 4, 'pt': 5, 'ru': 6, 'zh': 7, 'ja': 8}
-    num_languages = max(cfg.model.num_languages, len(set(lang_map.values())))
+    # Load tokenizer
+    print(f"\nLoading tokenizer: {config['model']['base_model']}")
+    tokenizer = XLMRobertaTokenizer.from_pretrained(config['model']['base_model'])
     
     # Load datasets
-    print(f'Loading WMT19 dataset: {cfg.data.lang_pair}')
-    train_dataset = get_dataset(cfg.data.lang_pair, lang_map, split='train')
+    print("\n" + "="*80)
+    print("Loading Datasets")
+    print("="*80)
     
-    # Load validation split
+    train_dataset = load_multilingual_dataset(
+        lang_pairs=config['data']['lang_pairs'],
+        split='train',
+        max_examples_per_pair=config['data'].get('max_examples_per_pair'),
+        min_length=config['data'].get('min_text_length', 10),
+        max_length=config['data'].get('max_text_length', 500)
+    )
+    
+    print(f"\nTotal training examples: {len(train_dataset)}")
+    
+    # Create validation dataset (if available)
     val_dataset = None
     try:
-        val_dataset = get_dataset(cfg.data.lang_pair, lang_map, split='validation')
-    except:
-        print('Warning: Validation split not available')
+        val_dataset = load_multilingual_dataset(
+            lang_pairs=config['data']['lang_pairs'],
+            split='validation',
+            max_examples_per_pair=1000,  # Limit validation size
+            min_length=config['data'].get('min_text_length', 10),
+            max_length=config['data'].get('max_text_length', 500)
+        )
+        print(f"Total validation examples: {len(val_dataset)}")
+    except Exception as e:
+        print(f"Warning: Could not load validation dataset: {e}")
     
-    if len(train_dataset) == 0:
-        raise ValueError(f"No training samples found for lang_pair {cfg.data.lang_pair}")
+    # Create collators
+    train_collator = DualObjectiveCollator(
+        tokenizer=tokenizer,
+        mlm_probability=config['model']['mlm_probability'],
+        max_length=config['data']['max_length']
+    )
     
-    print(f'Train samples: {len(train_dataset)}')
-    if val_dataset and len(val_dataset) > 0:
-        print(f'Val samples: {len(val_dataset)}')
-    else:
-        print('Warning: No validation dataset found')
+    val_collator = SimpleCollator(
+        tokenizer=tokenizer,
+        max_length=config['data']['max_length']
+    ) if val_dataset is not None else None
     
-    train_loader = get_dataloader(
-        train_dataset, 
-        batch_size=cfg.data.batch_size, 
-        shuffle=True, 
-        num_workers=cfg.data.num_workers
+    # Create data loaders
+    print("\nCreating data loaders...")
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config['data']['batch_size'],
+        shuffle=True,
+        collate_fn=train_collator,
+        num_workers=config['data'].get('num_workers', 0),
+        pin_memory=(device == 'cuda')
     )
     
     val_loader = None
-    if val_dataset and len(val_dataset) > 0:
-        val_loader = get_dataloader(
-            val_dataset, 
-            batch_size=cfg.data.batch_size, 
-            shuffle=False, 
-            num_workers=cfg.data.num_workers
+    if val_dataset is not None:
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=config['data']['batch_size'],
+            shuffle=False,
+            collate_fn=val_collator,
+            num_workers=config['data'].get('num_workers', 0),
+            pin_memory=(device == 'cuda')
         )
     
-    # Model
-    print('Initializing model...')
-    model = MultilingualJEPA(
-        encoder_name=cfg.model.encoder_name,
-        pooling=cfg.model.pooling,
-        num_languages=num_languages,
-        tau=cfg.model.tau
+    # Create model
+    print("\n" + "="*80)
+    print("Initializing Model")
+    print("="*80)
+    
+    model = BertDualObjective(
+        model_name=config['model']['base_model'],
+        lambda_alignment=config['model']['lambda_alignment'],
+        alignment_loss_type=config['model']['alignment_loss_type']
     )
     
-    # Optimizer
-    trainable_params = list(model.x_encoder.parameters()) + \
-                       list(model.predictor.parameters()) + \
-                       list(model.lang_embedding.parameters())
-    optimizer = torch.optim.Adam(trainable_params, lr=cfg.training.learning_rate)
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
     
-    # Trainer
-    trainer = Trainer(
+    # Create optimizer
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config['training']['learning_rate'],
+        weight_decay=config['training']['weight_decay']
+    )
+    
+    # Create scheduler
+    num_training_steps = len(train_loader) * config['training']['epochs']
+    num_warmup_steps = config['training'].get('warmup_steps', 0)
+    
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps
+    )
+    
+    # Create trainer
+    print("\n" + "="*80)
+    print("Creating Trainer")
+    print("="*80)
+    
+    trainer = DualObjectiveTrainer(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         optimizer=optimizer,
+        scheduler=scheduler,
         device=device,
-        max_grad_norm=cfg.training.max_grad_norm,
-        log_interval=cfg.training.log_interval
+        max_grad_norm=config['training']['max_grad_norm'],
+        log_interval=config['training']['log_interval'],
+        save_dir=config['output']['save_dir'],
+        accumulation_steps=config['training'].get('accumulation_steps', 1)
     )
     
+    # Resume from checkpoint if specified
+    if args.resume:
+        print(f"\nResuming from checkpoint: {args.resume}")
+        trainer.load_checkpoint(args.resume)
+    
     # Train
-    print('Starting training...')
-    trainer.train(num_epochs=cfg.training.epochs)
+    print("\n" + "="*80)
+    print("Starting Training")
+    print("="*80)
     
-    # Evaluate if validation set available
-    if val_loader:
-        print('\nComputing final metrics...')
-        metrics = compute_metrics(model, val_loader, device=device)
-        print(f'Cosine Similarity: {metrics["cosine_similarity"]:.4f}')
-        print(f'MSE: {metrics["mse"]:.4f}')
-        print(f'Embedding Diversity: {metrics["embedding_diversity"]:.4f}')
-        print(f'Linearity Error: {metrics["linearity_error"]:.4f}')
-    else:
-        metrics = {}
+    trainer.train(
+        num_epochs=config['training']['epochs'],
+        save_every=config['training'].get('save_every', 1)
+    )
     
-    # Save model
-    os.makedirs(cfg.output.save_dir, exist_ok=True)
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'metrics': metrics,
-        'config': OmegaConf.to_container(cfg, resolve=True)
-    }, os.path.join(cfg.output.save_dir, 'checkpoint.pt'))
-    print(f'\nModel saved to {cfg.output.save_dir}/checkpoint.pt')
-    
-    # Save config used for this run
-    OmegaConf.save(cfg, os.path.join(cfg.output.save_dir, 'config.yaml'))
-    print(f'Config saved to {cfg.output.save_dir}/config.yaml')
+    print("\n" + "="*80)
+    print("Training Complete!")
+    print("="*80)
+    print(f"Checkpoints saved to: {config['output']['save_dir']}")
 
 
 if __name__ == '__main__':
-    main()
-
+    parser = argparse.ArgumentParser(description='Train dual-objective BERT model')
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='experiments/exp_test/config.yaml',
+        help='Path to configuration file'
+    )
+    parser.add_argument(
+        '--resume',
+        type=str,
+        default=None,
+        help='Path to checkpoint to resume from'
+    )
+    
+    args = parser.parse_args()
+    main(args)
