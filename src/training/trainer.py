@@ -9,6 +9,7 @@ from tqdm import tqdm
 from typing import Dict, Optional, List
 import os
 import json
+import wandb
 
 
 class DualObjectiveTrainer:
@@ -28,7 +29,8 @@ class DualObjectiveTrainer:
         max_grad_norm: float = 1.0,
         log_interval: int = 100,
         save_dir: str = './checkpoints',
-        accumulation_steps: int = 1
+        accumulation_steps: int = 1,
+        use_wandb: bool = True
     ):
         """
         Args:
@@ -42,6 +44,7 @@ class DualObjectiveTrainer:
             log_interval: Logging frequency (steps)
             save_dir: Directory to save checkpoints
             accumulation_steps: Gradient accumulation steps
+            use_wandb: Whether to log to Weights & Biases
         """
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -51,6 +54,7 @@ class DualObjectiveTrainer:
         self.log_interval = log_interval
         self.save_dir = save_dir
         self.accumulation_steps = accumulation_steps
+        self.use_wandb = use_wandb
         
         # Create save directory
         os.makedirs(save_dir, exist_ok=True)
@@ -72,6 +76,10 @@ class DualObjectiveTrainer:
         self.epoch = 0
         self.best_val_loss = float('inf')
         self.history = []
+        
+        # Watch model with wandb
+        if self.use_wandb and wandb.run is not None:
+            wandb.watch(self.model, log='all', log_freq=self.log_interval)
     
     def train_epoch(self) -> Dict[str, float]:
         """
@@ -138,6 +146,14 @@ class DualObjectiveTrainer:
                         'cos_sim': f"{avg_metrics['cls_cosine_sim']:.4f}"
                     })
                     
+                    # Log to wandb
+                    if self.use_wandb and wandb.run is not None:
+                        log_dict = {f'train/{k}': v for k, v in avg_metrics.items()}
+                        log_dict['train/learning_rate'] = self.optimizer.param_groups[0]['lr']
+                        log_dict['train/global_step'] = self.global_step
+                        log_dict['train/epoch'] = self.epoch
+                        wandb.log(log_dict, step=self.global_step)
+                    
                     # Reset metrics for next interval
                     total_metrics = {}
                     num_batches = 0
@@ -189,6 +205,12 @@ class DualObjectiveTrainer:
         
         # Compute averages
         avg_metrics = {k: v / num_batches for k, v in total_metrics.items()}
+        
+        # Log to wandb
+        if self.use_wandb and wandb.run is not None:
+            log_dict = {f'val/{k}': v for k, v in avg_metrics.items()}
+            log_dict['val/epoch'] = self.epoch
+            wandb.log(log_dict, step=self.global_step)
         
         return avg_metrics
     
@@ -286,6 +308,23 @@ class DualObjectiveTrainer:
         model_dir = os.path.join(self.save_dir, filename.replace('.pt', ''))
         os.makedirs(model_dir, exist_ok=True)
         self.model.save_pretrained(model_dir)
+        
+        # Save to wandb as artifact (for best and final models)
+        if self.use_wandb and wandb.run is not None:
+            if filename in ['best_model.pt', 'final_model.pt']:
+                artifact = wandb.Artifact(
+                    name=f"model-{wandb.run.id}",
+                    type='model',
+                    description=f"Model checkpoint: {filename}",
+                    metadata={
+                        'epoch': self.epoch,
+                        'global_step': self.global_step,
+                        'best_val_loss': self.best_val_loss
+                    }
+                )
+                artifact.add_file(checkpoint_path)
+                artifact.add_dir(model_dir)
+                wandb.log_artifact(artifact)
     
     def load_checkpoint(self, checkpoint_path: str):
         """

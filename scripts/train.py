@@ -11,6 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import XLMRobertaTokenizer, get_linear_schedule_with_warmup
 import argparse
+import wandb
 
 from src.models.bert_dual_objective import BertDualObjective
 from src.data.datasets import load_multilingual_dataset
@@ -29,6 +30,22 @@ def main(args):
     # Load configuration
     print(f"Loading configuration from {args.config}")
     config = load_config(args.config)
+    
+    # Initialize Weights & Biases
+    use_wandb = config.get('wandb', {}).get('enabled', True) and not args.no_wandb
+    if use_wandb:
+        wandb.init(
+            project=config.get('wandb', {}).get('project', 'llm-jepa-translation'),
+            name=config.get('wandb', {}).get('run_name', None),
+            config=config,
+            tags=config.get('wandb', {}).get('tags', []),
+            notes=config.get('wandb', {}).get('notes', ''),
+            resume='allow' if args.resume else None
+        )
+        print(f"✓ W&B initialized: {wandb.run.name}")
+        print(f"  URL: {wandb.run.url}")
+    else:
+        print("W&B logging disabled")
     
     # Set device
     device = config['output']['device']
@@ -77,8 +94,10 @@ def main(args):
         max_length=config['data']['max_length']
     )
     
-    val_collator = SimpleCollator(
+    # Use same collator for validation (needed for compute_total_loss)
+    val_collator = DualObjectiveCollator(
         tokenizer=tokenizer,
+        mlm_probability=config['model']['mlm_probability'],
         max_length=config['data']['max_length']
     ) if val_dataset is not None else None
     
@@ -153,7 +172,8 @@ def main(args):
         max_grad_norm=config['training']['max_grad_norm'],
         log_interval=config['training']['log_interval'],
         save_dir=config['output']['save_dir'],
-        accumulation_steps=config['training'].get('accumulation_steps', 1)
+        accumulation_steps=config['training'].get('accumulation_steps', 1),
+        use_wandb=use_wandb
     )
     
     # Resume from checkpoint if specified
@@ -175,6 +195,11 @@ def main(args):
     print("Training Complete!")
     print("="*80)
     print(f"Checkpoints saved to: {config['output']['save_dir']}")
+    
+    # Finish wandb run
+    if use_wandb:
+        wandb.finish()
+        print("W&B run finished")
 
 
 if __name__ == '__main__':
@@ -190,6 +215,11 @@ if __name__ == '__main__':
         type=str,
         default=None,
         help='Path to checkpoint to resume from'
+    )
+    parser.add_argument(
+        '--no-wandb',
+        action='store_true',
+        help='Disable Weights & Biases logging'
     )
     
     args = parser.parse_args()

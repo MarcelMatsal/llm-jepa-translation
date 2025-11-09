@@ -3,7 +3,9 @@ from .metrics import (
     compute_cls_similarity,
     compute_alignment_metrics,
     compute_discrimination_score,
-    evaluate_alignment_quality
+    evaluate_language_pair_alignment,
+    compute_retrieval_accuracy,
+    evaluate_model_comprehensive
 )
 
 __all__ = [
@@ -11,6 +13,8 @@ __all__ = [
     'compute_cls_similarity',
     'compute_alignment_metrics',
     'compute_discrimination_score',
-    'evaluate_alignment_quality'
+    'evaluate_language_pair_alignment',
+    'compute_retrieval_accuracy',
+    'evaluate_model_comprehensive'
 ]
 

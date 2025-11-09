@@ -20,7 +20,7 @@ data:
 # Training configuration
 training:
   epochs: 10  # Number of training epochs
-  learning_rate: 2e-5  # Initial learning rate
+  learning_rate: 0.00002  # Initial learning rate (2e-5)
   weight_decay: 0.01  # AdamW weight decay
   warmup_steps: 1000  # Linear warmup steps
   max_grad_norm: 1.0  # Gradient clipping norm
@@ -39,3 +39,11 @@ evaluation:
   eval_batch_size: 32
   num_eval_batches: 10  # Number of batches for discrimination tests
   retrieval_top_k: [1, 5, 10]  # Top-k values for retrieval accuracy
+
+# Weights & Biases configuration
+wandb:
+  enabled: true
+  project: "llm-jepa-translation"
+  run_name: null  # Auto-generated if null
+  tags: ["xlm-roberta-base", "dual-objective", "de-en", "fr-en", "cs-en"]
+  notes: "Training dual-objective BERT for cross-lingual alignment"

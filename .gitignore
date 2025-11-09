@@ -11,3 +11,7 @@ experiments/*/metrics.json
 
 # scratch 
 scratch/*
+wandb/*
+
+downstream_tasks/*
+experiments/exp_test/*

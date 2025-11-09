@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=llm_jepa_tests
-#SBATCH --output=test_output_%j.log
-#SBATCH --error=test_error_%j.log
+#SBATCH --output=logs/test_output_%j.log
+#SBATCH --error=logs/test_error_%j.log
 #SBATCH --time=01:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
