@@ -1,5 +1,9 @@
 # Dual-Objective BERT Training Configuration
 
+# Experiment metadata
+experiment_name: "full"
+description: "Full training run with multiple language pairs"
+
 # Model configuration
 model:
   base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
@@ -32,6 +36,11 @@ training:
 output:
   save_dir: "./experiments/exp_test/checkpoints"
   device: "cuda"  # 'cuda' or 'cpu' (auto-detected if cuda available)
+  # HuggingFace Hub configuration (optional)
+  hub_model_base: "maktzgls/bert-jepa"  # Base Hub model ID (experiment_name will be appended)
+  push_to_hub: true  # Push checkpoints to HuggingFace Hub
+  # Or specify full hub_model_id to override auto-generation:
+  # hub_model_id: "maktzgls/bert-jepa-custom-name"
 
 # Evaluation configuration (optional)
 evaluation:

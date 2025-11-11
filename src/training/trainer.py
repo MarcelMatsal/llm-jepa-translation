@@ -10,6 +10,7 @@ from typing import Dict, Optional, List
 import os
 import json
 import wandb
+from huggingface_hub import HfApi, create_repo
 
 
 class DualObjectiveTrainer:
@@ -31,7 +32,10 @@ class DualObjectiveTrainer:
         save_dir: str = './checkpoints',
         accumulation_steps: int = 1,
         use_wandb: bool = True,
-        tokenizer = None
+        tokenizer = None,
+        hub_model_id: Optional[str] = None,
+        push_to_hub: bool = False,
+        experiment_metadata: Optional[Dict] = None
     ):
         """
         Args:
@@ -43,10 +47,13 @@ class DualObjectiveTrainer:
             device: 'cuda' or 'cpu'
             max_grad_norm: Gradient clipping norm
             log_interval: Logging frequency (steps)
-            save_dir: Directory to save checkpoints
+            save_dir: Directory to save checkpoints (local)
             accumulation_steps: Gradient accumulation steps
             use_wandb: Whether to log to Weights & Biases
             tokenizer: Tokenizer to save with model checkpoints (optional but recommended)
+            hub_model_id: HuggingFace Hub model ID (e.g., 'username/model-name')
+            push_to_hub: Whether to push checkpoints to HuggingFace Hub
+            experiment_metadata: Metadata about the experiment (for model card and commit messages)
         """
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -58,9 +65,21 @@ class DualObjectiveTrainer:
         self.accumulation_steps = accumulation_steps
         self.use_wandb = use_wandb
         self.tokenizer = tokenizer
+        self.hub_model_id = hub_model_id
+        self.push_to_hub = push_to_hub
+        self.experiment_metadata = experiment_metadata or {}
         
         # Create save directory
         os.makedirs(save_dir, exist_ok=True)
+        
+        # Create HuggingFace Hub repository if pushing to hub
+        if self.push_to_hub and self.hub_model_id:
+            try:
+                create_repo(self.hub_model_id, exist_ok=True, repo_type="model")
+                print(f"✓ HuggingFace Hub repository ready: {self.hub_model_id}")
+            except Exception as e:
+                print(f"⚠ Warning: Could not create/verify Hub repository: {e}")
+                print(f"  Make sure you're logged in with 'huggingface-cli login'")
         
         # Initialize optimizer
         if optimizer is None:
@@ -80,7 +99,7 @@ class DualObjectiveTrainer:
         self.best_val_loss = float('inf')
         self.history = []
         
-        # Watch model with wandb
+        # Watch model with wandb for gradient and parameter tracking
         if self.use_wandb and wandb.run is not None:
             wandb.watch(self.model, log='all', log_freq=self.log_interval)
     
@@ -230,6 +249,19 @@ class DualObjectiveTrainer:
         print(f"Device: {self.device}")
         print(f"Gradient accumulation steps: {self.accumulation_steps}")
         print(f"Effective batch size: {self.train_loader.batch_size * self.accumulation_steps}")
+        
+        # Log training config to wandb
+        if self.use_wandb and wandb.run is not None:
+            wandb.config.update({
+                'num_epochs': num_epochs,
+                'save_every': save_every,
+                'steps_per_epoch': len(self.train_loader),
+                'accumulation_steps': self.accumulation_steps,
+                'effective_batch_size': self.train_loader.batch_size * self.accumulation_steps,
+                'max_grad_norm': self.max_grad_norm,
+                'device': str(self.device)
+            }, allow_val_change=True)
+        
         print()
         
         for epoch in range(num_epochs):
@@ -264,6 +296,27 @@ class DualObjectiveTrainer:
             }
             self.history.append(epoch_history)
             
+            # Log epoch summary to wandb
+            if self.use_wandb and wandb.run is not None:
+                epoch_summary = {
+                    'epoch/number': epoch + 1,
+                    'epoch/train_loss': train_metrics.get('total_loss', 0.0),
+                    'epoch/train_mlm_loss': train_metrics.get('mlm_loss', 0.0),
+                    'epoch/train_alignment_loss': train_metrics.get('alignment_loss', 0.0),
+                    'epoch/train_cls_similarity': train_metrics.get('cls_cosine_sim', 0.0),
+                    'epoch/train_mlm_accuracy': train_metrics.get('mlm_accuracy', 0.0)
+                }
+                
+                if val_metrics:
+                    epoch_summary.update({
+                        'epoch/val_loss': val_metrics.get('total_loss', 0.0),
+                        'epoch/val_mlm_loss': val_metrics.get('mlm_loss', 0.0),
+                        'epoch/val_alignment_loss': val_metrics.get('alignment_loss', 0.0),
+                        'epoch/val_cls_similarity': val_metrics.get('cls_cosine_sim', 0.0)
+                    })
+                
+                wandb.log(epoch_summary, step=self.global_step)
+            
             # Save checkpoint
             if (epoch + 1) % save_every == 0:
                 self.save_checkpoint(f'checkpoint_epoch_{epoch + 1}.pt')
@@ -282,56 +335,172 @@ class DualObjectiveTrainer:
         # Save training history
         self.save_history()
         
+        # Log training completion to wandb
+        if self.use_wandb and wandb.run is not None:
+            wandb.summary['training_complete'] = True
+            wandb.summary['total_epochs'] = num_epochs
+            wandb.summary['total_steps'] = self.global_step
+            
+            # Create a summary table of all epochs
+            if self.history:
+                epoch_table = wandb.Table(
+                    columns=['epoch', 'train_loss', 'train_mlm', 'train_align', 
+                             'val_loss', 'val_mlm', 'val_align', 'cls_similarity']
+                )
+                for h in self.history:
+                    epoch_table.add_data(
+                        h['epoch'],
+                        h['train_metrics'].get('total_loss', 0),
+                        h['train_metrics'].get('mlm_loss', 0),
+                        h['train_metrics'].get('alignment_loss', 0),
+                        h['val_metrics'].get('total_loss', 0) if h['val_metrics'] else 0,
+                        h['val_metrics'].get('mlm_loss', 0) if h['val_metrics'] else 0,
+                        h['val_metrics'].get('alignment_loss', 0) if h['val_metrics'] else 0,
+                        h['train_metrics'].get('cls_cosine_sim', 0)
+                    )
+                wandb.log({'training_summary': epoch_table})
+        
         print("Training complete!")
     
     def save_checkpoint(self, filename: str):
         """
-        Save model checkpoint.
+        Save model checkpoint to HuggingFace Hub if enabled, otherwise save locally.
         
         Args:
             filename: Checkpoint filename
         """
-        checkpoint_path = os.path.join(self.save_dir, filename)
-        
-        checkpoint = {
-            'epoch': self.epoch,
-            'global_step': self.global_step,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'best_val_loss': self.best_val_loss,
-            'history': self.history
-        }
-        
-        if self.scheduler is not None:
-            checkpoint['scheduler_state_dict'] = self.scheduler.state_dict()
-        
-        torch.save(checkpoint, checkpoint_path)
-        
-        # Also save model in HuggingFace format
-        model_dir = os.path.join(self.save_dir, filename.replace('.pt', ''))
-        os.makedirs(model_dir, exist_ok=True)
-        self.model.save_pretrained(model_dir)
-        
-        # Save tokenizer alongside model
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(model_dir)
-        
-        # Save to wandb as artifact (for best and final models)
-        if self.use_wandb and wandb.run is not None:
-            if filename in ['best_model.pt', 'final_model.pt']:
-                artifact = wandb.Artifact(
-                    name=f"model-{wandb.run.id}",
-                    type='model',
-                    description=f"Model checkpoint: {filename}",
-                    metadata={
-                        'epoch': self.epoch,
-                        'global_step': self.global_step,
-                        'best_val_loss': self.best_val_loss
-                    }
+        # Push to HuggingFace Hub if enabled (skip local saving)
+        if self.push_to_hub and self.hub_model_id:
+            try:
+                # Determine commit message with experiment metadata
+                commit_parts = [f"Checkpoint: {filename} (epoch {self.epoch + 1}, step {self.global_step})"]
+                if self.experiment_metadata.get('experiment_name'):
+                    commit_parts.append(f"Experiment: {self.experiment_metadata['experiment_name']}")
+                if self.experiment_metadata.get('config_description'):
+                    commit_parts.append(self.experiment_metadata['config_description'])
+                commit_message = " | ".join(commit_parts)
+                
+                # Push model to hub
+                print(f"  → Pushing to HuggingFace Hub: {self.hub_model_id}")
+                self.model.push_to_hub(
+                    self.hub_model_id,
+                    commit_message=commit_message,
+                    private=False
                 )
-                artifact.add_file(checkpoint_path)
-                artifact.add_dir(model_dir)
-                wandb.log_artifact(artifact)
+                
+                # Push tokenizer to hub if available
+                if self.tokenizer is not None:
+                    self.tokenizer.push_to_hub(
+                        self.hub_model_id,
+                        commit_message=commit_message,
+                        private=False
+                    )
+                
+                hub_url = f"https://huggingface.co/{self.hub_model_id}"
+                print(f"  ✓ Successfully pushed to Hub: {hub_url}")
+                
+                # Log to wandb with HuggingFace Hub reference
+                if self.use_wandb and wandb.run is not None:
+                    checkpoint_metadata = {
+                        'checkpoint/name': filename,
+                        'checkpoint/epoch': self.epoch + 1,
+                        'checkpoint/global_step': self.global_step,
+                        'checkpoint/best_val_loss': self.best_val_loss,
+                        'checkpoint/storage': 'huggingface_hub',
+                        'checkpoint/hub_url': hub_url,
+                        'checkpoint/commit_message': commit_message
+                    }
+                    wandb.log(checkpoint_metadata, step=self.global_step)
+                    
+                    # Update wandb summary for best/final models
+                    if filename == 'best_model.pt':
+                        wandb.summary['best_model_hub_url'] = hub_url
+                        wandb.summary['best_model_epoch'] = self.epoch + 1
+                        wandb.summary['best_val_loss'] = self.best_val_loss
+                    elif filename == 'final_model.pt':
+                        wandb.summary['final_model_hub_url'] = hub_url
+                        wandb.summary['final_model_epoch'] = self.epoch + 1
+                
+            except Exception as e:
+                print(f"  ⚠ Warning: Failed to push to Hub: {e}")
+                # Log the failure to wandb
+                if self.use_wandb and wandb.run is not None:
+                    wandb.log({
+                        'checkpoint/error': str(e),
+                        'checkpoint/name': filename,
+                        'checkpoint/epoch': self.epoch + 1
+                    }, step=self.global_step)
+        else:
+            # Save locally only if not pushing to hub
+            checkpoint_path = os.path.join(self.save_dir, filename)
+            
+            # Ensure the save directory exists before saving
+            os.makedirs(self.save_dir, exist_ok=True)
+            
+            checkpoint = {
+                'epoch': self.epoch,
+                'global_step': self.global_step,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'best_val_loss': self.best_val_loss,
+                'history': self.history
+            }
+            
+            if self.scheduler is not None:
+                checkpoint['scheduler_state_dict'] = self.scheduler.state_dict()
+            
+            torch.save(checkpoint, checkpoint_path)
+            print(f"  ✓ Saved checkpoint to {checkpoint_path}")
+            
+            # Also save model in HuggingFace format
+            model_dir = os.path.join(self.save_dir, filename.replace('.pt', ''))
+            os.makedirs(model_dir, exist_ok=True)
+            self.model.save_pretrained(model_dir)
+            
+            # Save tokenizer alongside model
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(model_dir)
+            
+            # Log checkpoint save to wandb
+            if self.use_wandb and wandb.run is not None:
+                checkpoint_metadata = {
+                    'checkpoint/name': filename,
+                    'checkpoint/epoch': self.epoch + 1,
+                    'checkpoint/global_step': self.global_step,
+                    'checkpoint/best_val_loss': self.best_val_loss,
+                    'checkpoint/storage': 'local',
+                    'checkpoint/path': checkpoint_path
+                }
+                wandb.log(checkpoint_metadata, step=self.global_step)
+                
+                # Save as wandb artifact (for best and final models)
+                if filename in ['best_model.pt', 'final_model.pt']:
+                    artifact_name = filename.replace('.pt', '').replace('_', '-')
+                    artifact = wandb.Artifact(
+                        name=f"{artifact_name}-{wandb.run.id}",
+                        type='model',
+                        description=f"Model checkpoint: {filename}",
+                        metadata={
+                            'epoch': self.epoch + 1,
+                            'global_step': self.global_step,
+                            'best_val_loss': self.best_val_loss,
+                            'experiment_name': self.experiment_metadata.get('experiment_name', 'unknown'),
+                            'config_description': self.experiment_metadata.get('config_description', '')
+                        }
+                    )
+                    artifact.add_file(checkpoint_path)
+                    artifact.add_dir(model_dir)
+                    wandb.log_artifact(artifact)
+                    print(f"  ✓ Logged artifact to wandb: {artifact_name}")
+                
+                # Update wandb summary for best/final models
+                if filename == 'best_model.pt':
+                    wandb.summary['best_model_path'] = checkpoint_path
+                    wandb.summary['best_model_epoch'] = self.epoch + 1
+                    wandb.summary['best_val_loss'] = self.best_val_loss
+                elif filename == 'final_model.pt':
+                    wandb.summary['final_model_path'] = checkpoint_path
+                    wandb.summary['final_model_epoch'] = self.epoch + 1
     
     def load_checkpoint(self, checkpoint_path: str):
         """

@@ -1,6 +1,10 @@
 # Dual-Objective BERT Training Configuration - MEDIUM
 # Mid-size configuration for serious training runs
 
+# Experiment metadata
+experiment_name: "medium"
+description: "Medium training run: 2 language pairs, 10k examples per pair, 5 epochs"
+
 # Model configuration
 model:
   base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
@@ -33,6 +37,8 @@ training:
 output:
   save_dir: "./experiments/exp_test/checkpoints_medium"
   device: "cuda"  # 'cuda' or 'cpu'
+  hub_model_base: "maktzgls/bert-jepa"  # Will become maktzgls/bert-jepa-medium
+  push_to_hub: true  # Push checkpoints to HuggingFace Hub
 
 # Evaluation configuration (optional)
 evaluation:
