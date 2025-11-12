@@ -5,17 +5,17 @@ Supports sequence classification, token classification, question answering, and 
 import sys
 import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add BertBenchmarking directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
 from typing import Optional
 
-from downstream_tasks.BertForBlankTests.BertForSequenceClassification import SequenceClassificationTask
-from downstream_tasks.BertForBlankTests.BertForTokenClassification import TokenClassificationTask
-from downstream_tasks.BertForBlankTests.BertForQuestionAnswering import QuestionAnsweringTask
-from downstream_tasks.BertForBlankTests.BertForMultipleChoice import MultipleChoiceTask
-from downstream_tasks.task_configs import get_hyperparameters, list_available_datasets
+from BertForBlankTests.BertForSequenceClassification import SequenceClassificationTask
+from BertForBlankTests.BertForTokenClassification import TokenClassificationTask
+from BertForBlankTests.BertForQuestionAnswering import QuestionAnsweringTask
+from BertForBlankTests.BertForMultipleChoice import MultipleChoiceTask
+from task_configs import get_hyperparameters, list_available_datasets
 
 
 def main():

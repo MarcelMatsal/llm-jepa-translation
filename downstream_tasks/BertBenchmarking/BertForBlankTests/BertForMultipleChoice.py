@@ -14,8 +14,13 @@ from transformers import (
     AutoModel,
 )
 
-from downstream_tasks.base_task import BaseTask
-from downstream_tasks.task_configs import get_dataset_config, get_hyperparameters
+import sys
+import os
+# Add BertBenchmarking directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from base_task import BaseTask
+from task_configs import get_dataset_config, get_hyperparameters
 
 
 class MultipleChoiceTask(BaseTask):
