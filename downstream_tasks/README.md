@@ -1,23 +1,121 @@
-# Downstream Task Testing
+# Downstream Task Testing & Benchmarking
 
-Quick testing suite to verify that the trained dual-objective model maintains BERT-compatible architecture and can be used for standard downstream tasks.
+This directory contains tools for:
+1. **Quick Testing** - Verify that trained models maintain BERT-compatible architecture
+2. **Benchmarking** - Train and evaluate models on standard downstream tasks for comparison
 
 ## 🎯 Purpose
 
+### Quick Testing
 These scripts allow you to:
 1. **Verify architecture** - Confirm the model is BERT-compatible
 2. **Test embeddings** - Extract and compare sentence embeddings
 3. **Test MLM** - Verify masked language modeling still works
 4. **Prepare for real tasks** - Ensure the model is ready for downstream fine-tuning
 
+### Benchmarking
+The benchmarking system allows you to:
+1. **Train models** on downstream tasks (sequence classification, token classification, QA, multiple choice)
+2. **Compare models** - Easily benchmark different pretrained models (xlm-roberta-base, your finetuned models, etc.)
+3. **Reproducible results** - Get JSON outputs with metrics for easy comparison
+4. **Standard datasets** - Use well-known benchmarks (GLUE, SQuAD, CoNLL-2003, SWAG, etc.)
+
 ## 📁 Files
 
+### Quick Testing Scripts
 - `load_model.py` - Load model and verify architecture
 - `test_embeddings.py` - Test sentence embedding extraction and similarity
 - `test_mlm.py` - Test masked language modeling capabilities
-- `README.md` - This file
+
+### Benchmarking System
+- `run_benchmark.py` - Main script to train/evaluate on downstream tasks
+- `base_task.py` - Base class for all task implementations
+- `task_configs.py` - Default configurations and dataset mappings
+- `BertForBlankTests/` - Task-specific implementations:
+  - `BertForSequenceClassification.py` - GLUE tasks (SST-2, MRPC, etc.)
+  - `BertForTokenClassification.py` - NER tasks (CoNLL-2003)
+  - `BertForQuestionAnswering.py` - QA tasks (SQuAD)
+  - `BertForMultipleChoice.py` - Multiple choice (SWAG, RACE)
 
 ## 🚀 Quick Start
+
+### Benchmarking System
+
+The benchmarking system makes it easy to train and compare models on downstream tasks:
+
+```bash
+# Train on SST-2 (sequence classification)
+python downstream_tasks/run_benchmark.py \
+    --task sequence_classification \
+    --dataset glue \
+    --dataset_config sst2 \
+    --model xlm-roberta-base \
+    --output_dir results/sst2_xlm_roberta
+
+# Compare with your finetuned model
+python downstream_tasks/run_benchmark.py \
+    --task sequence_classification \
+    --dataset glue \
+    --dataset_config sst2 \
+    --model User/your-finetuned-model \
+    --output_dir results/sst2_your_model
+
+# Train on CoNLL-2003 (token classification / NER)
+python downstream_tasks/run_benchmark.py \
+    --task token_classification \
+    --dataset conll2003 \
+    --model xlm-roberta-base
+
+# Train on SQuAD (question answering)
+python downstream_tasks/run_benchmark.py \
+    --task question_answering \
+    --dataset squad \
+    --dataset_config v1_1 \
+    --model xlm-roberta-base
+
+# Train on SWAG (multiple choice)
+python downstream_tasks/run_benchmark.py \
+    --task multiple_choice \
+    --dataset swag \
+    --model xlm-roberta-base
+
+# Evaluate only (no training)
+python downstream_tasks/run_benchmark.py \
+    --task sequence_classification \
+    --dataset glue \
+    --dataset_config sst2 \
+    --eval_only \
+    --checkpoint results/sst2_xlm_roberta
+
+# List available datasets for a task
+python downstream_tasks/run_benchmark.py \
+    --task sequence_classification \
+    --list_datasets
+```
+
+**Output:**
+- Model checkpoints saved to `--output_dir`
+- Results JSON with metrics at `{output_dir}/results.json`
+- Training logs at `{output_dir}/logs/`
+
+**Results JSON format:**
+```json
+{
+  "model": "xlm-roberta-base",
+  "task": "SequenceClassificationTask",
+  "train_loss": 0.123,
+  "train_runtime": 1234.5,
+  "eval_metrics": {
+    "eval_loss": 0.456,
+    "eval_accuracy": 0.89,
+    "eval_f1": 0.88,
+    ...
+  },
+  "training_args": {...}
+}
+```
+
+### Quick Testing
 
 ### Using SLURM (Recommended for Cluster)
 
@@ -196,15 +294,11 @@ The **training process** explicitly aligned CLS tokens across languages, so:
 
 ## 🎓 Next Steps
 
+### After Quick Testing
+
 Once you've verified the architecture:
 
-1. **Fine-tune on downstream tasks:**
-   - Sentiment analysis
-   - Named entity recognition
-   - Question answering
-   - Text classification
-
-2. **Use as sentence encoder:**
+1. **Use as sentence encoder:**
    ```python
    from src.models.bert_dual_objective import BertDualObjective
    
@@ -212,13 +306,27 @@ Once you've verified the architecture:
    embeddings = model.extract_cls_embeddings(input_ids, attention_mask, cls_positions)
    ```
 
-3. **Access underlying XLM-RoBERTa:**
+2. **Access underlying XLM-RoBERTa:**
    ```python
    xlm_roberta = model.mlm_model  # Standard XLMRobertaForMaskedLM
    # Use with HuggingFace Trainer or any other framework
    ```
 
-4. **Evaluate on benchmarks:**
+### After Benchmarking
+
+1. **Compare models:**
+   - Run benchmarks on multiple models (pretrained, your finetuned, etc.)
+   - Compare JSON results to see which model performs better
+   - Use the same hyperparameters for fair comparison
+
+2. **Fine-tune on downstream tasks:**
+   - Use the benchmarking system to train on:
+     - Sentiment analysis (SST-2)
+     - Named entity recognition (CoNLL-2003)
+     - Question answering (SQuAD)
+     - Text classification (GLUE tasks)
+
+3. **Evaluate on additional benchmarks:**
    - XNLI (cross-lingual NLI)
    - BUCC (bilingual retrieval)
    - Tatoeba (translation pair retrieval)
@@ -261,8 +369,20 @@ To see the improvement from your training:
 
 ## 📝 Notes
 
+### Quick Testing
 - These are **quick tests**, not full benchmarks
-- For production evaluation, use standard benchmarks (XNLI, etc.)
 - The scripts are designed to be simple and easy to modify
 - Add your own test cases as needed!
+
+### Benchmarking
+- Uses standard HuggingFace Trainer for simplicity
+- All tasks use the same hyperparameter defaults (can be overridden)
+- Results are saved in JSON format for easy comparison
+- Models are saved as HuggingFace checkpoints for easy loading
+- Supports any HuggingFace model (xlm-roberta-base, your models, etc.)
+
+### Customization
+- Modify `task_configs.py` to add new datasets or change hyperparameters
+- Each task class can be used independently or via `run_benchmark.py`
+- Easy to extend with new task types by inheriting from `BaseTask`
 
