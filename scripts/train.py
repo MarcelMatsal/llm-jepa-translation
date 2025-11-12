@@ -163,6 +163,36 @@ def main(args):
     print("Creating Trainer")
     print("="*80)
     
+    # Get HuggingFace Hub configuration
+    hub_model_id = args.hub_model_id or config.get('output', {}).get('hub_model_id')
+    hub_model_base = config.get('output', {}).get('hub_model_base', 'maktzgls/bert-jepa')
+    experiment_name = args.experiment_name or config.get('experiment_name')
+    push_to_hub = args.push_to_hub or config.get('output', {}).get('push_to_hub', False)
+    
+    # Auto-generate hub_model_id if experiment_name is provided but hub_model_id is not
+    if push_to_hub and not hub_model_id and experiment_name:
+        hub_model_id = f"{hub_model_base}-{experiment_name}"
+        print(f"✓ Auto-generated Hub model ID: {hub_model_id}")
+    
+    if push_to_hub and hub_model_id:
+        print(f"✓ HuggingFace Hub push enabled")
+        print(f"  Model ID: {hub_model_id}")
+        if experiment_name:
+            print(f"  Experiment: {experiment_name}")
+    
+    # Prepare experiment metadata
+    experiment_metadata = {
+        'experiment_name': experiment_name,
+        'config_path': args.config,
+        'config_description': config.get('description', ''),
+        'base_model': config['model']['base_model'],
+        'lambda_alignment': config['model']['lambda_alignment'],
+        'alignment_loss_type': config['model']['alignment_loss_type'],
+        'lang_pairs': config['data']['lang_pairs'],
+        'batch_size': config['data']['batch_size'],
+        'epochs': config['training']['epochs']
+    }
+    
     trainer = DualObjectiveTrainer(
         model=model,
         train_loader=train_loader,
@@ -175,7 +205,10 @@ def main(args):
         save_dir=config['output']['save_dir'],
         accumulation_steps=config['training'].get('accumulation_steps', 1),
         use_wandb=use_wandb,
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        hub_model_id=hub_model_id,
+        push_to_hub=push_to_hub,
+        experiment_metadata=experiment_metadata
     )
     
     # Resume from checkpoint if specified
@@ -222,6 +255,23 @@ if __name__ == '__main__':
         '--no-wandb',
         action='store_true',
         help='Disable Weights & Biases logging'
+    )
+    parser.add_argument(
+        '--hub-model-id',
+        type=str,
+        default=None,
+        help='HuggingFace Hub model ID (e.g., username/model-name). If not provided, will be auto-generated from experiment_name'
+    )
+    parser.add_argument(
+        '--experiment-name',
+        type=str,
+        default=None,
+        help='Experiment name (e.g., "small", "medium"). Used to auto-generate hub_model_id if not explicitly provided'
+    )
+    parser.add_argument(
+        '--push-to-hub',
+        action='store_true',
+        help='Push model checkpoints to HuggingFace Hub'
     )
     
     args = parser.parse_args()

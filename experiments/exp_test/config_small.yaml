@@ -1,6 +1,10 @@
 # Dual-Objective BERT Training Configuration - SMALL TEST
 # This is a smaller configuration for quick iteration and testing
 
+# Experiment metadata
+experiment_name: "small"
+description: "Small test run: 1 language pair, 1k examples, 2 epochs"
+
 # Model configuration
 model:
   base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
@@ -33,6 +37,9 @@ training:
 output:
   save_dir: "./experiments/exp_test/checkpoints_small"
   device: "cuda"  # 'cuda' or 'cpu'
+  hub_model_base: "maktzgls/bert-jepa"  # Will become maktzgls/bert-jepa-small
+  push_to_hub: true  # Push checkpoints to HuggingFace Hub
+
 
 # Evaluation configuration (optional)
 evaluation:

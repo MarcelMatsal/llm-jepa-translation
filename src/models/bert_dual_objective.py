@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from transformers import XLMRobertaForMaskedLM, XLMRobertaModel
 from typing import Dict, Optional, Tuple
 import json
+import os
+from huggingface_hub import HfApi
 
 
 
@@ -344,6 +346,49 @@ class BertDualObjective(nn.Module):
         }
         with open(f"{save_directory}/dual_objective_config.json", 'w') as f:
             json.dump(config, f)
+    
+    def push_to_hub(
+        self,
+        repo_id: str,
+        commit_message: Optional[str] = None,
+        private: bool = False,
+        **kwargs
+    ):
+        """
+        Push model to HuggingFace Hub.
+        
+        Args:
+            repo_id: Repository ID on HuggingFace Hub (e.g., 'username/model-name')
+            commit_message: Commit message for the push
+            private: Whether the repository should be private
+            **kwargs: Additional arguments passed to push_to_hub
+        """
+        import tempfile
+        import shutil
+        
+        # Create a temporary directory to save everything
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save model to temp directory
+            self.save_pretrained(tmp_dir)
+            
+            # Push the base MLM model (includes config.json and pytorch_model.bin)
+            self.mlm_model.push_to_hub(
+                repo_id=repo_id,
+                commit_message=commit_message or "Update model",
+                private=private,
+                **kwargs
+            )
+            
+            # Upload the dual_objective_config.json separately
+            api = HfApi()
+            config_path = os.path.join(tmp_dir, "dual_objective_config.json")
+            api.upload_file(
+                path_or_fileobj=config_path,
+                path_in_repo="dual_objective_config.json",
+                repo_id=repo_id,
+                commit_message=commit_message or "Update dual objective config",
+                repo_type="model"
+            )
     
     @classmethod
     def from_pretrained(cls, load_directory: str):

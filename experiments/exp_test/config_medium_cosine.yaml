@@ -1,5 +1,9 @@
-# Dual-Objective BERT Training Configuration - MEDIUM
+# Dual-Objective BERT Training Configuration - MEDIUM with Cosine Loss
 # Mid-size configuration for serious training runs
+
+# Experiment metadata
+experiment_name: "medium-cosine"
+description: "Medium training run with cosine loss: 2 language pairs, 10k examples per pair, 5 epochs"
 
 # Model configuration
 model:
@@ -28,11 +32,13 @@ training:
   log_interval: 100  # Logging frequency (steps)
   save_every: 1  # Save checkpoint every epoch
   accumulation_steps: 1  # No gradient accumulation (batch_size=16 is good)
-e
+
 # Output configuration
 output:
   save_dir: "./experiments/exp_test/checkpoints_medium_cosine"
   device: "cuda"  # 'cuda' or 'cpu'
+  hub_model_base: "maktzgls/bert-jepa"  # Will become maktzgls/bert-jepa-medium-cosine
+  push_to_hub: true  # Push checkpoints to HuggingFace Hub
 
 # Evaluation configuration (optional)
 evaluation:
