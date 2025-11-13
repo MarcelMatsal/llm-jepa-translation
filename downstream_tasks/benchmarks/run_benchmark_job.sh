@@ -1,36 +1,33 @@
 #!/bin/bash
-#SBATCH --job-name=bert_benchmark
-#SBATCH --output=logs/benchmark_output_%j.log
-#SBATCH --error=logs/benchmark_error_%j.log
-#SBATCH --time=12:00:00
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
+
+#SBATCH -p gpu                # Specify the 'gpu' partition
+#SBATCH -N 1                  # Number of nodes
+#SBATCH --gres=gpu:1          # Request 1 GPU
+#SBATCH -n 1                  # Number of tasks
+#SBATCH -c 8                  # Number of CPUs per task
+#SBATCH --mem=64G             # Request 64GB of memory
+#SBATCH -t 36:00:00           # Set a time limit of 36 hours
+#SBATCH -J bert_benchmark     # Job name
+#SBATCH -o slurm-%j.out       # Standard output file
+#SBATCH -e slurm-%j.err       # Standard error file
 
 # Simple BERT Benchmarking Job
-# Runs xlm-roberta-base on 4 downstream tasks
+# Runs benchmarks on 4 downstream tasks
 
+# --- Environment Setup ---
 echo "=========================================="
+echo "Job started on $(hostname) at $(date)"
 echo "Job ID: $SLURM_JOB_ID"
-echo "Node: $SLURM_NODELIST"
-echo "Start Time: $(date)"
 echo "=========================================="
 echo ""
 
-# Navigate to project directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$PROJECT_ROOT"
+echo "Loading required modules..."
+module load anaconda
+module load cuda
 
-echo "Project root: $PROJECT_ROOT"
-
-# Activate virtual environment if exists
-if [ -d "venv" ]; then
-    echo "Activating virtual environment..."
-    source venv/bin/activate
-fi
+# --- Job Execution ---
+echo "Navigating to submission directory: $SLURM_SUBMIT_DIR"
+cd $SLURM_SUBMIT_DIR
 
 # GPU info
 echo ""
@@ -42,12 +39,28 @@ echo ""
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
+# Get model name from argument (default: roberta-base)
+MODEL="${1:-roberta-base}"
+echo "Running benchmarks with model: $MODEL"
+echo ""
+
 # Run benchmarks
 cd downstream_tasks/benchmarks
-bash run_all_benchmarks.sh xlm-roberta-base
+
+# NOTE: Update this path to match your conda environment
+# Example: /users/YOUR_USERNAME/miniconda3/envs/YOUR_ENV/bin/python
+PYTHON_PATH="/users/allalani/miniconda3/envs/csci1470/bin/python"
+
+echo "Using Python: $PYTHON_PATH"
+echo ""
+
+$PYTHON_PATH -u benchmark_seq_class.py --model $MODEL
+$PYTHON_PATH -u benchmark_ner.py --model $MODEL
+$PYTHON_PATH -u benchmark_qa.py --model $MODEL
+$PYTHON_PATH -u benchmark_mc.py --model $MODEL
 
 echo ""
 echo "=========================================="
-echo "Job completed at: $(date)"
+echo "Job finished at $(date)"
 echo "=========================================="
 
