@@ -9,51 +9,42 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 
-# BERT Downstream Task Benchmarking
-# Runs xlm-roberta-base on all 4 downstream tasks
+# Simple BERT Benchmarking Job
+# Runs xlm-roberta-base on 4 downstream tasks
 
-# Print job information
 echo "=========================================="
 echo "Job ID: $SLURM_JOB_ID"
-echo "Job Name: $SLURM_JOB_NAME"
 echo "Node: $SLURM_NODELIST"
 echo "Start Time: $(date)"
 echo "=========================================="
 echo ""
 
-# Navigate to project directory (adjust path if needed)
-# Auto-detect: go up from script location
+# Navigate to project directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
+
 echo "Project root: $PROJECT_ROOT"
 
-# Activate virtual environment (if exists)
+# Activate virtual environment if exists
 if [ -d "venv" ]; then
     echo "Activating virtual environment..."
     source venv/bin/activate
 fi
 
-# Verify GPU availability
+# GPU info
 echo ""
-echo "=========================================="
-echo "GPU Information"
-echo "=========================================="
+echo "GPU Information:"
 nvidia-smi
 echo ""
 
-# Set environment variables
+# Environment variables
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # Run benchmarks
-echo "=========================================="
-echo "Running Benchmarks"
-echo "=========================================="
-echo ""
-
-cd "$SCRIPT_DIR"
-bash run_quick_benchmark.sh
+cd downstream_tasks/benchmarks
+bash run_all_benchmarks.sh xlm-roberta-base
 
 echo ""
 echo "=========================================="
