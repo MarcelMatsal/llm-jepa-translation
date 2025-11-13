@@ -29,6 +29,7 @@ module load cuda
 echo "Navigating to submission directory: $SLURM_SUBMIT_DIR"
 cd $SLURM_SUBMIT_DIR
 
+
 # GPU info
 echo ""
 echo "GPU Information:"
