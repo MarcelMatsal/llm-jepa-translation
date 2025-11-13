@@ -67,6 +67,31 @@ pip install -r requirements.txt
 
 ## 💻 Usage
 
+### Dataset: OPUS-100
+
+This project uses the **OPUS-100** dataset ([Helsinki-NLP/opus-100](https://huggingface.co/datasets/Helsinki-NLP/opus-100)), which provides:
+- 100 language pairs (all English-centric)
+- Up to 1M training examples per pair
+- Validation and test splits
+- Wide language diversity (European, Asian, African languages)
+
+**Explore available language pairs:**
+```bash
+# List all available pairs
+python scripts/list_opus100_pairs.py
+
+# Filter for specific language (e.g., English pairs)
+python scripts/list_opus100_pairs.py --filter en
+
+# Show dataset sizes (slower, downloads metadata)
+python scripts/list_opus100_pairs.py --sizes
+```
+
+**Test dataset loading:**
+```bash
+python scripts/test_opus100_loading.py
+```
+
 ### Training
 
 Train the model with dual objectives:
@@ -80,7 +105,10 @@ python scripts/train.py --config experiments/exp_test/config.yaml
 - `lambda_alignment`: Weight for alignment loss (default: 1.0)
 - `alignment_loss_type`: Type of alignment loss (`mse`, `cosine`, `contrastive`)
 - `mlm_probability`: MLM masking probability (default: 0.15)
-- `lang_pairs`: Language pairs for training (e.g., `["de-en", "fr-en", "cs-en"]`)
+- `lang_pairs`: Language pairs from OPUS-100 (e.g., `["de-en", "fr-en", "en-ja"]`)
+- `max_examples_per_pair`: Maximum examples per language pair (uses `min(max_examples, available)`)
+  - Set to specific number (e.g., `50000`) to limit dataset size
+  - Set to `null` to load all available examples
 
 **Resume training:**
 ```bash
@@ -211,4 +239,5 @@ MIT License
 
 - Brown University CS2952X
 - HuggingFace Transformers library
-- WMT19 translation dataset
+- OPUS-100 dataset (Helsinki-NLP)
+- OPUS corpus (Jörg Tiedemann)

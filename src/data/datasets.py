@@ -1,5 +1,5 @@
 """
-Dataset loader for WMT19 translation dataset with concatenated sequences.
+Dataset loader for OPUS-100 translation dataset with concatenated sequences.
 Supports multiple language pairs for mixed batching.
 """
 from typing import Dict, List, Tuple, Optional
@@ -149,30 +149,39 @@ def load_translation_dataset(
     max_length: int = 500
 ) -> TranslationPairDataset:
     """
-    Load WMT19 translation dataset for a single language pair.
+    Load OPUS-100 translation dataset for a single language pair.
     
     Args:
-        lang_pair: Language pair (e.g., 'de-en', 'cs-en')
-        split: Dataset split ('train' or 'validation')
-        max_examples: Maximum number of examples to load (None = all)
+        lang_pair: Language pair (e.g., 'de-en', 'cs-en', 'en-fr')
+        split: Dataset split ('train', 'validation', or 'test')
+        max_examples: Maximum number of examples to load. 
+                     If None, loads all available examples.
+                     If specified, loads min(max_examples, total_available).
         min_length: Minimum text length (characters)
         max_length: Maximum text length (characters)
     
     Returns:
         TranslationPairDataset
     """
-    # Load dataset from HuggingFace
+    # Load dataset from HuggingFace OPUS-100
     try:
-        dataset = load_dataset("wmt19", lang_pair, split=split)
+        dataset = load_dataset("Helsinki-NLP/opus-100", lang_pair, split=split)
     except Exception as e:
-        raise ValueError(f"Failed to load WMT19 dataset for {lang_pair}: {e}")
+        raise ValueError(f"Failed to load OPUS-100 dataset for {lang_pair}: {e}")
     
     lang1_code, lang2_code = lang_pair.split('-')
+    
+    # Determine the actual number of examples to process
+    total_available = len(dataset)
+    num_to_load = min(max_examples, total_available) if max_examples else total_available
+    
+    print(f"  Available: {total_available} examples, Loading: {num_to_load}")
     
     # Extract and filter examples
     examples = []
     for i, example in enumerate(dataset):
-        if max_examples and len(examples) >= max_examples:
+        # Stop once we've collected enough valid examples
+        if len(examples) >= num_to_load:
             break
         
         translation = example.get('translation', {})
@@ -195,7 +204,7 @@ def load_translation_dataset(
     if len(examples) == 0:
         raise ValueError(
             f"No valid examples found for {lang_pair}. "
-            f"Check that the language codes are correct."
+            f"Check that the language codes are correct and length filters are appropriate."
         )
     
     return TranslationPairDataset(examples, lang_pair)
@@ -209,12 +218,15 @@ def load_multilingual_dataset(
     max_length: int = 500
 ) -> MultilingualDataset:
     """
-    Load multiple language pairs into a single mixed dataset.
+    Load multiple language pairs from OPUS-100 into a single mixed dataset.
     
     Args:
-        lang_pairs: List of language pairs (e.g., ['de-en', 'fr-en', 'cs-en'])
-        split: Dataset split ('train' or 'validation')
-        max_examples_per_pair: Maximum examples per language pair
+        lang_pairs: List of language pairs (e.g., ['de-en', 'fr-en', 'en-es'])
+        split: Dataset split ('train', 'validation', or 'test')
+        max_examples_per_pair: Maximum examples per language pair.
+                               If None, loads all available examples for each pair.
+                               If specified, loads min(max_examples_per_pair, total_available)
+                               for each language pair.
         min_length: Minimum text length (characters)
         max_length: Maximum text length (characters)
     

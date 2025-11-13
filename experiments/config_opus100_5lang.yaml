@@ -1,0 +1,68 @@
+# OPUS-100 Training Configuration - 5 Language Pairs
+# Full training run with diverse language families
+
+# Experiment metadata
+experiment_name: "opus100-5lang-10k"
+description: "Training with 5 diverse language pairs from OPUS-100, 10k examples each (50k total)"
+
+# Model configuration
+model:
+  base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
+  lambda_alignment: 1.0  # Weight for alignment loss
+  alignment_loss_type: "cosine"  # Options: 'mse', 'cosine', 'contrastive'
+  mlm_probability: 0.15  # Masking probability for standard MLM
+
+# Dataset configuration - OPUS-100
+data:
+  lang_pairs: 
+    - "de-en"      # German-English - 1,000,000 available
+    - "en-fr"      # French-English - 1,000,000 available
+    - "en-es"      # Spanish-English - 1,000,000 available
+    - "en-ja"      # Japanese-English - 1,000,000 available
+    - "ar-en"      # Arabic-English - 1,000,000 available
+  
+  batch_size: 16  # Batch size for training
+  max_length: 256  # Maximum sequence length after tokenization
+  num_workers: 4  # DataLoader workers
+  
+  # Load 10k examples per pair = 50k total training examples
+  max_examples_per_pair: 10000
+  
+  # Text filtering (applied BEFORE counting towards max_examples_per_pair)
+  min_text_length: 10   # Minimum characters per text
+  max_text_length: 500  # Maximum characters per text
+
+# Training configuration
+training:
+  epochs: 20  # 5 epochs for meaningful training
+  learning_rate: 0.00002  # 2e-5, standard for fine-tuning
+  weight_decay: 0.01  # AdamW weight decay
+  warmup_steps: 500  # Linear warmup steps
+  max_grad_norm: 1.0  # Gradient clipping norm
+  log_interval: 100  # Log every 100 steps
+  save_every: 5  # Save checkpoint every epoch
+  accumulation_steps: 1  # No gradient accumulation
+
+# Output configuration
+output:
+  save_dir: "./experiments/exp_test/checkpoints_opus100_5lang"
+  device: "cuda"  # 'cuda' or 'cpu'
+  hub_model_base: "maktzgls/bert-jepa"  # HuggingFace Hub model name base
+  push_to_hub: false  # Set to true to push to HuggingFace Hub
+
+# Evaluation configuration
+evaluation:
+  eval_lang_pairs: ["de-en", "en-fr", "en-es", "en-ja", "ar-en"]
+  eval_batch_size: 32
+  num_eval_batches: 10
+  retrieval_top_k: [1, 5, 10]
+
+# Weights & Biases configuration
+wandb:
+  enabled: true
+  entity: "makt_zgls"
+  project: "llm-jepa-translation"
+  run_name: "opus100-5lang-10k-cosine"
+  tags: ["opus-100", "xlm-roberta-base", "5-languages", "10k-per-pair", "cosine-alignment"]
+  notes: "Training with OPUS-100: 5 diverse language pairs (de, fr, es, ja, ar with en), 10k examples each, cosine alignment loss"
+
