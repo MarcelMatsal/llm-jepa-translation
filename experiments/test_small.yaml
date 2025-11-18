@@ -1,0 +1,62 @@
+# Small Test Configuration for Debugging
+# Minimal setup for quick testing
+
+# Experiment metadata
+experiment_name: "test-small"
+description: "Small test configuration with 1 language pair and minimal data"
+
+# Model configuration
+model:
+  base_model: "xlm-roberta-base"
+  lambda_alignment: 1.0
+  alignment_loss_type: "cosine"
+  mlm_probability: 0.15
+
+# Dataset configuration - Very small for testing
+data:
+  lang_pairs: 
+    - "de-en"  # Just one language pair
+  
+  batch_size: 4  # Small batch size
+  max_length: 128  # Shorter sequences
+  num_workers: 2
+  
+  # Only 100 examples for quick testing
+  max_examples_per_pair: 100
+  
+  min_text_length: 10
+  max_text_length: 300
+
+# Training configuration - Minimal for testing
+training:
+  epochs: 2  # Just 2 epochs
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  warmup_steps: 10
+  max_grad_norm: 1.0
+  log_interval: 10
+  save_every: 1  # Save every epoch
+  accumulation_steps: 1
+
+# Output configuration
+output:
+  save_dir: "./experiments/test_small/checkpoints"
+  device: "cuda"
+  push_to_hub: true
+
+# Evaluation configuration
+evaluation:
+  eval_lang_pairs: ["de-en"]
+  eval_batch_size: 8
+  num_eval_batches: 5
+  retrieval_top_k: [1, 5]
+
+# Weights & Biases configuration
+wandb:
+  enabled: true  
+  entity: "makt_zgls"
+  project: "llm-jepa-translation"
+  run_name: "test-small"
+  tags: ["test", "debugging"]
+  notes: "Small test configuration for debugging"
+

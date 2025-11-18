@@ -1,0 +1,62 @@
+================================================================================
+CLS Token Embedding Analysis Summary
+================================================================================
+
+Model: maktzgls/bert-jepa-opus100-5lang-10k
+Total samples: 1100
+Embedding dimension: 768
+Number of languages: 11
+
+Languages analyzed:
+  de (German): 100 samples
+  en (English): 100 samples
+  es (Spanish): 100 samples
+  fr (French): 100 samples
+  it (Italian): 100 samples
+  ja (Japanese): 100 samples
+  nl (Dutch): 100 samples
+  pl (Polish): 100 samples
+  pt (Portuguese): 100 samples
+  ru (Russian): 100 samples
+  sv (Swedish): 100 samples
+
+================================================================================
+PCA Variance Explained
+================================================================================
+
+PC 1:  0.2093 (cumulative: 0.2093)
+PC 2:  0.0448 (cumulative: 0.2541)
+PC 3:  0.0406 (cumulative: 0.2946)
+PC 4:  0.0323 (cumulative: 0.3269)
+PC 5:  0.0247 (cumulative: 0.3516)
+PC 6:  0.0232 (cumulative: 0.3747)
+PC 7:  0.0210 (cumulative: 0.3957)
+PC 8:  0.0192 (cumulative: 0.4149)
+PC 9:  0.0168 (cumulative: 0.4317)
+PC10:  0.0151 (cumulative: 0.4468)
+PC11:  0.0144 (cumulative: 0.4612)
+PC12:  0.0136 (cumulative: 0.4748)
+PC13:  0.0130 (cumulative: 0.4878)
+PC14:  0.0126 (cumulative: 0.5004)
+PC15:  0.0121 (cumulative: 0.5124)
+PC16:  0.0118 (cumulative: 0.5242)
+PC17:  0.0106 (cumulative: 0.5349)
+PC18:  0.0105 (cumulative: 0.5454)
+PC19:  0.0096 (cumulative: 0.5550)
+PC20:  0.0093 (cumulative: 0.5643)
+
+================================================================================
+Generated Files
+================================================================================
+
+Visualizations:
+  - pca_2d.png: PCA projection in 2D
+  - pca_3d.png: PCA projection in 3D
+  - tsne_2d.png: t-SNE projection in 2D
+  - tsne_3d.png: t-SNE projection in 3D
+  - eigenspectrum.png: Eigenvalue spectrum
+
+Data files:
+  - embeddings.npz: Raw embeddings and projections
+  - metadata.json: Analysis metadata
+  - analysis_summary.txt: This file

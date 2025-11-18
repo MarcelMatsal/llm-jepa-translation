@@ -1,0 +1,62 @@
+================================================================================
+CLS Token Embedding Analysis Summary
+================================================================================
+
+Model: xlm-roberta-base
+Total samples: 1100
+Embedding dimension: 768
+Number of languages: 11
+
+Languages analyzed:
+  de (German): 100 samples
+  en (English): 100 samples
+  es (Spanish): 100 samples
+  fr (French): 100 samples
+  it (Italian): 100 samples
+  ja (Japanese): 100 samples
+  nl (Dutch): 100 samples
+  pl (Polish): 100 samples
+  pt (Portuguese): 100 samples
+  ru (Russian): 100 samples
+  sv (Swedish): 100 samples
+
+================================================================================
+PCA Variance Explained
+================================================================================
+
+PC 1:  0.8117 (cumulative: 0.8117)
+PC 2:  0.0117 (cumulative: 0.8235)
+PC 3:  0.0101 (cumulative: 0.8335)
+PC 4:  0.0073 (cumulative: 0.8408)
+PC 5:  0.0063 (cumulative: 0.8472)
+PC 6:  0.0053 (cumulative: 0.8524)
+PC 7:  0.0050 (cumulative: 0.8575)
+PC 8:  0.0047 (cumulative: 0.8622)
+PC 9:  0.0047 (cumulative: 0.8669)
+PC10:  0.0043 (cumulative: 0.8712)
+PC11:  0.0038 (cumulative: 0.8750)
+PC12:  0.0036 (cumulative: 0.8786)
+PC13:  0.0036 (cumulative: 0.8822)
+PC14:  0.0033 (cumulative: 0.8855)
+PC15:  0.0029 (cumulative: 0.8885)
+PC16:  0.0028 (cumulative: 0.8912)
+PC17:  0.0027 (cumulative: 0.8939)
+PC18:  0.0026 (cumulative: 0.8965)
+PC19:  0.0024 (cumulative: 0.8989)
+PC20:  0.0023 (cumulative: 0.9013)
+
+================================================================================
+Generated Files
+================================================================================
+
+Visualizations:
+  - pca_2d.png: PCA projection in 2D
+  - pca_3d.png: PCA projection in 3D
+  - tsne_2d.png: t-SNE projection in 2D
+  - tsne_3d.png: t-SNE projection in 3D
+  - eigenspectrum.png: Eigenvalue spectrum
+
+Data files:
+  - embeddings.npz: Raw embeddings and projections
+  - metadata.json: Analysis metadata
+  - analysis_summary.txt: This file

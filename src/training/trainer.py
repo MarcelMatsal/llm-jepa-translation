@@ -9,6 +9,7 @@ from tqdm import tqdm
 from typing import Dict, Optional, List
 import os
 import json
+import shutil
 import wandb
 from huggingface_hub import HfApi, create_repo
 
@@ -61,7 +62,8 @@ class DualObjectiveTrainer:
         self.device = device
         self.max_grad_norm = max_grad_norm
         self.log_interval = log_interval
-        self.save_dir = save_dir
+        # Convert to absolute path to avoid issues with relative paths
+        self.save_dir = os.path.abspath(save_dir)
         self.accumulation_steps = accumulation_steps
         self.use_wandb = use_wandb
         self.tokenizer = tokenizer
@@ -70,7 +72,7 @@ class DualObjectiveTrainer:
         self.experiment_metadata = experiment_metadata or {}
         
         # Create save directory
-        os.makedirs(save_dir, exist_ok=True)
+        os.makedirs(self.save_dir, exist_ok=True)
         
         # Create HuggingFace Hub repository if pushing to hub
         if self.push_to_hub and self.hub_model_id:
@@ -435,7 +437,11 @@ class DualObjectiveTrainer:
             checkpoint_path = os.path.join(self.save_dir, filename)
             
             # Ensure the save directory exists before saving
-            os.makedirs(self.save_dir, exist_ok=True)
+            try:
+                os.makedirs(self.save_dir, exist_ok=True)
+            except Exception as e:
+                print(f"  ✗ Error creating directory {self.save_dir}: {e}")
+                raise
             
             checkpoint = {
                 'epoch': self.epoch,
@@ -449,8 +455,27 @@ class DualObjectiveTrainer:
             if self.scheduler is not None:
                 checkpoint['scheduler_state_dict'] = self.scheduler.state_dict()
             
-            torch.save(checkpoint, checkpoint_path)
-            print(f"  ✓ Saved checkpoint to {checkpoint_path}")
+            # Save checkpoint with error handling
+            try:
+                # Try to save to a temporary file first
+                temp_checkpoint_path = checkpoint_path + '.tmp'
+                torch.save(checkpoint, temp_checkpoint_path)
+                # If successful, move to final location
+                if os.path.exists(checkpoint_path):
+                    os.remove(checkpoint_path)
+                os.rename(temp_checkpoint_path, checkpoint_path)
+                print(f"  ✓ Saved checkpoint to {checkpoint_path}")
+            except Exception as e:
+                print(f"  ✗ Error saving checkpoint to {checkpoint_path}: {e}")
+                print(f"  Directory exists: {os.path.exists(self.save_dir)}")
+                print(f"  Directory writable: {os.access(self.save_dir, os.W_OK)}")
+                # Try to get disk space information
+                try:
+                    disk_usage = shutil.disk_usage(self.save_dir)
+                    print(f"  Disk space - Free: {disk_usage.free / (1024**3):.2f} GB, Total: {disk_usage.total / (1024**3):.2f} GB")
+                except:
+                    pass
+                raise
             
             # Also save model in HuggingFace format
             model_dir = os.path.join(self.save_dir, filename.replace('.pt', ''))
