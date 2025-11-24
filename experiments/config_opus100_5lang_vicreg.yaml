@@ -1,0 +1,77 @@
+# OPUS-100 Training Configuration - 5 Language Pairs with VICReg
+# Using VICReg (Variance-Invariance-Covariance Regularization) for alignment
+
+# Experiment metadata
+experiment_name: "opus100-5lang-vicreg"
+description: "Training with 5 diverse language pairs using VICReg loss for collapse-free alignment"
+
+# Model configuration
+model:
+  base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
+  lambda_alignment: 1.0  # VICReg can use higher weight (no collapse risk)
+  
+  # VICReg alignment loss configuration
+  alignment_loss:
+    type: "vicreg"  # Variance-Invariance-Covariance Regularization
+    
+    # VICReg-specific parameters (from paper)
+    sim_coeff: 25.0   # Invariance loss weight
+    std_coeff: 25.0   # Variance loss weight
+    cov_coeff: 1.0    # Covariance loss weight
+    eps: 0.0001       # Numerical stability constant
+  
+  mlm_probability: 0.15  # Masking probability for standard MLM
+
+# Dataset configuration - OPUS-100
+data:
+  lang_pairs: 
+    - "de-en"      # German-English
+    - "en-fr"      # French-English
+    - "en-es"      # Spanish-English
+    - "en-ja"      # Japanese-English
+    - "ar-en"      # Arabic-English
+  
+  batch_size: 32  # VICReg works well with standard batch sizes
+  max_length: 256  # Maximum sequence length after tokenization
+  num_workers: 4  # DataLoader workers
+  
+  # Load 10k examples per pair = 50k total training examples
+  max_examples_per_pair: 10000
+  
+  # Text filtering (applied BEFORE counting towards max_examples_per_pair)
+  min_text_length: 10   # Minimum characters per text
+  max_text_length: 500  # Maximum characters per text
+
+# Training configuration
+training:
+  epochs: 10
+  learning_rate: 0.00002  # 2e-5, standard for fine-tuning
+  weight_decay: 0.01  # AdamW weight decay
+  warmup_steps: 500  # Linear warmup steps
+  max_grad_norm: 1.0  # Gradient clipping norm
+  log_interval: 100  # Log every 100 steps
+  save_every: 2  # Save checkpoint every 2 epochs
+  accumulation_steps: 1  # No gradient accumulation
+
+# Output configuration
+output:
+  save_dir: "./experiments/opus100_5lang_vicreg/checkpoints"
+  device: "cuda"  # 'cuda' or 'cpu'
+  hub_model_base: "maktzgls/bert-jepa-vicreg"  # HuggingFace Hub model name base
+  push_to_hub: true  # Set to true to push to HuggingFace Hub
+
+# Evaluation configuration
+evaluation:
+  eval_lang_pairs: ["de-en", "en-fr", "en-es", "en-ja", "ar-en"]
+  eval_batch_size: 32
+  num_eval_batches: 10
+  retrieval_top_k: [1, 5, 10]
+
+# Weights & Biases configuration
+wandb:
+  enabled: true
+  entity: "makt_zgls"
+  project: "llm-jepa-translation"
+  run_name: "opus100-5lang-vicreg"
+  tags: ["opus-100", "xlm-roberta-base", "5-languages", "vicreg", "collapse-prevention"]
+  notes: "Training with OPUS-100: 5 diverse language pairs using VICReg loss. VICReg explicitly prevents collapse through variance regularization and decorrelation."

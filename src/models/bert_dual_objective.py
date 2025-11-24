@@ -28,13 +28,17 @@ class BertDualObjective(nn.Module):
         self,
         model_name: str = 'xlm-roberta-base',
         lambda_alignment: float = 1.0,
-        alignment_loss_type: str = 'mse'
+        alignment_loss_type: str = 'mse',  # Deprecated, use alignment_loss_config
+        alignment_loss_config: Optional[Dict] = None
     ):
         """
         Args:
             model_name: HuggingFace model identifier
             lambda_alignment: Weight for alignment loss (default: 1.0)
-            alignment_loss_type: Type of alignment loss ('mse', 'cosine', 'contrastive')
+            alignment_loss_type: DEPRECATED - Type of alignment loss ('mse', 'cosine', 'contrastive')
+                Use alignment_loss_config instead
+            alignment_loss_config: Dictionary with loss configuration
+                Example: {'type': 'sigreg', 'num_slices': 1024}
         """
         super().__init__()
         
@@ -46,8 +50,40 @@ class BertDualObjective(nn.Module):
         
         # Configuration
         self.lambda_alignment = lambda_alignment
-        self.alignment_loss_type = alignment_loss_type
         self.d_model = self.base_model.config.hidden_size
+        
+        # Create alignment loss using factory
+        from src.losses import create_loss
+        
+        if alignment_loss_config is None:
+            # Backward compatibility: convert old format to new
+            import warnings
+            warnings.warn(
+                f"Using deprecated 'alignment_loss_type' parameter. "
+                f"Please use 'alignment_loss_config' instead. "
+                f"Example: alignment_loss_config={{'type': '{alignment_loss_type}'}}",
+                DeprecationWarning
+            )
+            alignment_loss_config = {
+                'type': alignment_loss_type,
+                'temperature': 0.07  # Default for contrastive losses
+            }
+        
+        # Create loss and components
+        self.alignment_loss_fn, alignment_components = create_loss(
+            alignment_loss_config,
+            embedding_dim=self.d_model
+        )
+        
+        # Add components to model (if any)
+        self.alignment_components = nn.ModuleDict(alignment_components)
+        
+        # Store update hooks for post-optimization updates
+        self.update_hooks = self.alignment_loss_fn.get_update_hooks()
+        
+        # Store config for saving
+        self.alignment_loss_config = alignment_loss_config
+        self.alignment_loss_type = alignment_loss_config.get('type', alignment_loss_type)
     
     def forward(
         self,
@@ -182,56 +218,21 @@ class BertDualObjective(nn.Module):
         cls1 = self.extract_cls_embeddings(cls1_input_ids, cls1_attention_mask, cls1_positions)
         cls2 = self.extract_cls_embeddings(cls2_input_ids, cls2_attention_mask, cls2_positions)
         
-        # Normalize embeddings
-        cls1_norm = F.normalize(cls1, p=2, dim=-1)
-        cls2_norm = F.normalize(cls2, p=2, dim=-1)
+        # Compute alignment loss using the modular loss function
+        loss, metrics = self.alignment_loss_fn.compute(cls1, cls2)
         
-        # Compute alignment loss
-        if self.alignment_loss_type == 'mse':
-            # Mean squared error between normalized embeddings
-            loss = F.mse_loss(cls1_norm, cls2_norm)
-        
-        elif self.alignment_loss_type == 'cosine':
-            # Cosine similarity loss (1 - cosine_similarity)
-            cosine_sim = F.cosine_similarity(cls1_norm, cls2_norm, dim=-1)
-            loss = (1 - cosine_sim).mean()
-        
-        elif self.alignment_loss_type == 'contrastive':
-            # Contrastive loss (InfoNCE style)
-            # Positive pairs: (cls1[i], cls2[i])
-            # Negative pairs: (cls1[i], cls2[j]) for i != j
-            
-            batch_size = cls1_norm.shape[0]
-            
-            # Compute similarity matrix
-            sim_matrix = torch.matmul(cls1_norm, cls2_norm.T)  # (batch, batch)
-            
-            # Temperature scaling
-            temperature = 0.07
-            sim_matrix = sim_matrix / temperature
-            
-            # Labels: diagonal elements are positive pairs
-            labels = torch.arange(batch_size, device=sim_matrix.device)
-            
-            # Cross-entropy loss (both directions)
-            loss_cls1_to_cls2 = F.cross_entropy(sim_matrix, labels)
-            loss_cls2_to_cls1 = F.cross_entropy(sim_matrix.T, labels)
-            
-            loss = (loss_cls1_to_cls2 + loss_cls2_to_cls1) / 2
-        
-        else:
-            raise ValueError(f"Unknown alignment_loss_type: {self.alignment_loss_type}")
-        
-        # Compute metrics
+        # Add standard metrics for monitoring
         with torch.no_grad():
+            cls1_norm = F.normalize(cls1, p=2, dim=-1)
+            cls2_norm = F.normalize(cls2, p=2, dim=-1)
             cosine_sim = F.cosine_similarity(cls1_norm, cls2_norm, dim=-1).mean()
             euclidean_dist = torch.norm(cls1_norm - cls2_norm, p=2, dim=-1).mean()
         
-        metrics = {
-            'alignment_loss': loss.item(),
+        # Update metrics with standard monitoring values
+        metrics.update({
             'cls_cosine_sim': cosine_sim.item(),
             'cls_euclidean_dist': euclidean_dist.item()
-        }
+        })
         
         return loss, cls1, cls2, metrics
     

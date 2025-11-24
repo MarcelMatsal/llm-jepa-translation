@@ -129,11 +129,23 @@ def main(args):
     print("Initializing Model")
     print("="*80)
     
-    model = BertDualObjective(
-        model_name=config['model']['base_model'],
-        lambda_alignment=config['model']['lambda_alignment'],
-        alignment_loss_type=config['model']['alignment_loss_type']
-    )
+    # Check if using new or old config format
+    if 'alignment_loss' in config['model']:
+        # New format: alignment_loss is a dict
+        model = BertDualObjective(
+            model_name=config['model']['base_model'],
+            lambda_alignment=config['model']['lambda_alignment'],
+            alignment_loss_config=config['model']['alignment_loss']
+        )
+        print(f"Using alignment loss: {config['model']['alignment_loss']['type']}")
+    else:
+        # Old format: alignment_loss_type is a string
+        model = BertDualObjective(
+            model_name=config['model']['base_model'],
+            lambda_alignment=config['model']['lambda_alignment'],
+            alignment_loss_type=config['model']['alignment_loss_type']
+        )
+        print(f"Using alignment loss (deprecated format): {config['model']['alignment_loss_type']}")
     
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -181,13 +193,19 @@ def main(args):
             print(f"  Experiment: {experiment_name}")
     
     # Prepare experiment metadata
+    # Handle both old and new config formats for alignment loss
+    if 'alignment_loss' in config['model']:
+        alignment_loss_info = config['model']['alignment_loss']['type']
+    else:
+        alignment_loss_info = config['model'].get('alignment_loss_type', 'unknown')
+    
     experiment_metadata = {
         'experiment_name': experiment_name,
         'config_path': args.config,
         'config_description': config.get('description', ''),
         'base_model': config['model']['base_model'],
         'lambda_alignment': config['model']['lambda_alignment'],
-        'alignment_loss_type': config['model']['alignment_loss_type'],
+        'alignment_loss_type': alignment_loss_info,
         'lang_pairs': config['data']['lang_pairs'],
         'batch_size': config['data']['batch_size'],
         'epochs': config['training']['epochs']
