@@ -70,7 +70,7 @@ def create_loss(
 
 # Import functional losses to register them
 # This must come AFTER the factory definition to avoid circular imports
-from .functional import SIGRegLoss, VICRegLoss
+from .functional import SIGRegLoss
 
 
 # Export public API
@@ -81,7 +81,6 @@ __all__ = [
     'register_loss',
     'create_loss',
     'list_available_losses',
-    'SIGRegLoss',
-    'VICRegLoss'
+    'SIGRegLoss'
 ]
 

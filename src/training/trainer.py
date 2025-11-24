@@ -4,6 +4,7 @@ Combines MLM loss and CLS alignment loss.
 """
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict, Optional, List
@@ -213,13 +214,38 @@ class DualObjectiveTrainer:
         total_metrics = {}
         num_batches = 0
         
+        # Accumulate CLS embeddings for negative pair analysis
+        all_cls1 = []
+        all_cls2 = []
+        
         with torch.no_grad():
             for batch in tqdm(self.val_loader, desc='Validation'):
                 # Move batch to device
                 batch = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v 
                         for k, v in batch.items()}
                 
-                # Compute loss
+                # Compute loss and get CLS embeddings
+                # We need to extract CLS embeddings separately for negative pair analysis
+                cls1 = self.model.extract_cls_embeddings(
+                    batch['cls1_input_ids'],
+                    batch['cls1_attention_mask'],
+                    batch['cls1_positions']
+                )
+                cls2 = self.model.extract_cls_embeddings(
+                    batch['cls2_input_ids'],
+                    batch['cls2_attention_mask'],
+                    batch['cls2_positions']
+                )
+                
+                # Normalize embeddings
+                cls1_norm = F.normalize(cls1, p=2, dim=-1)
+                cls2_norm = F.normalize(cls2, p=2, dim=-1)
+                
+                # Store for negative pair computation
+                all_cls1.append(cls1_norm.cpu())
+                all_cls2.append(cls2_norm.cpu())
+                
+                # Compute loss using the model's method
                 loss, metrics = self.model.compute_total_loss(batch)
                 
                 # Accumulate metrics
@@ -229,6 +255,56 @@ class DualObjectiveTrainer:
         
         # Compute averages
         avg_metrics = {k: v / num_batches for k, v in total_metrics.items()}
+        
+        # Compute negative pair similarities
+        # Concatenate all embeddings
+        all_cls1 = torch.cat(all_cls1, dim=0)  # (N, d_model)
+        all_cls2 = torch.cat(all_cls2, dim=0)  # (N, d_model)
+        
+        N = all_cls1.shape[0]
+        
+        # Compute positive pair similarity (already in avg_metrics as cls_cosine_sim)
+        positive_sim = avg_metrics.get('cls_cosine_sim', 0.0)
+        
+        # Compute negative pair similarities
+        # For efficiency, we'll sample if N is very large
+        max_samples = min(N, 1000)  # Limit to avoid memory issues
+        
+        if N > max_samples:
+            # Randomly sample indices
+            import random
+            indices = random.sample(range(N), max_samples)
+            cls1_sample = all_cls1[indices]
+            cls2_sample = all_cls2[indices]
+        else:
+            cls1_sample = all_cls1
+            cls2_sample = all_cls2
+        
+        # Compute all pairwise similarities: cls1[i] · cls2[j]
+        # Shape: (max_samples, max_samples)
+        similarity_matrix = torch.mm(cls1_sample, cls2_sample.t())
+        
+        # Extract negative pairs (off-diagonal elements)
+        # Create mask for diagonal elements
+        mask = torch.eye(similarity_matrix.shape[0], dtype=torch.bool)
+        negative_sims = similarity_matrix[~mask]
+        
+        # Compute statistics for negative pairs
+        negative_sim_mean = negative_sims.mean().item()
+        negative_sim_std = negative_sims.std().item()
+        negative_sim_median = negative_sims.median().item()
+        
+        # Compute gap and ratio
+        sim_gap = positive_sim - negative_sim_mean
+        sim_ratio = positive_sim / (negative_sim_mean + 1e-8)  # Add epsilon to avoid division by zero
+        
+        # Add negative pair metrics
+        avg_metrics['cls_cosine_sim_positive'] = positive_sim
+        avg_metrics['cls_cosine_sim_negative'] = negative_sim_mean
+        avg_metrics['cls_cosine_sim_negative_std'] = negative_sim_std
+        avg_metrics['cls_cosine_sim_negative_median'] = negative_sim_median
+        avg_metrics['cls_cosine_sim_gap'] = sim_gap
+        avg_metrics['cls_cosine_sim_ratio'] = sim_ratio
         
         # Log to wandb
         if self.use_wandb and wandb.run is not None:
@@ -287,7 +363,10 @@ class DualObjectiveTrainer:
                 print(f"  Val Loss: {val_metrics.get('total_loss', 0.0):.4f} "
                       f"(MLM: {val_metrics.get('mlm_loss', 0.0):.4f}, "
                       f"Align: {val_metrics.get('alignment_loss', 0.0):.4f})")
-                print(f"  Val CLS Similarity: {val_metrics.get('cls_cosine_sim', 0.0):.4f}")
+                print(f"  Val CLS Similarity - Positive: {val_metrics.get('cls_cosine_sim_positive', 0.0):.4f}, "
+                      f"Negative: {val_metrics.get('cls_cosine_sim_negative', 0.0):.4f}, "
+                      f"Gap: {val_metrics.get('cls_cosine_sim_gap', 0.0):.4f}")
+            
             
             # Save history
             epoch_history = {
@@ -314,7 +393,10 @@ class DualObjectiveTrainer:
                         'epoch/val_loss': val_metrics.get('total_loss', 0.0),
                         'epoch/val_mlm_loss': val_metrics.get('mlm_loss', 0.0),
                         'epoch/val_alignment_loss': val_metrics.get('alignment_loss', 0.0),
-                        'epoch/val_cls_similarity': val_metrics.get('cls_cosine_sim', 0.0)
+                        'epoch/val_cls_similarity_positive': val_metrics.get('cls_cosine_sim_positive', 0.0),
+                        'epoch/val_cls_similarity_negative': val_metrics.get('cls_cosine_sim_negative', 0.0),
+                        'epoch/val_cls_similarity_gap': val_metrics.get('cls_cosine_sim_gap', 0.0),
+                        'epoch/val_cls_similarity_ratio': val_metrics.get('cls_cosine_sim_ratio', 0.0)
                     })
                 
                 wandb.log(epoch_summary, step=self.global_step)
