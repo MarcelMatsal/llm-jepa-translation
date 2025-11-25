@@ -223,6 +223,8 @@ def main(args):
         save_dir=config['output']['save_dir'],
         accumulation_steps=config['training'].get('accumulation_steps', 1),
         use_wandb=use_wandb,
+        use_amp=True,  # Enable mixed precision for memory efficiency
+        use_gradient_checkpointing=True,  # Enable gradient checkpointing
         tokenizer=tokenizer,
         hub_model_id=hub_model_id,
         push_to_hub=push_to_hub,

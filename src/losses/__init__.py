@@ -25,9 +25,9 @@ def create_loss(
         
     Example:
         config = {
-            'type': 'sigreg',
-            'num_slices': 1024,
-            'num_points': 17
+            'type': 'infonce',
+            'temperature': 0.07,
+            'use_projector': True
         }
         loss, components = create_loss(config, embedding_dim=768)
     """
@@ -45,6 +45,11 @@ def create_loss(
     # Get required components for this loss
     required_components = loss_class.get_required_components()
     
+    # Special handling for InfoNCE projector (optional component)
+    if loss_type == 'infonce' and config.get('use_projector', False):
+        from src.components import Projector
+        required_components['projector'] = Projector
+    
     # Instantiate components
     components = {}
     for comp_name, comp_class in required_components.items():
@@ -53,6 +58,12 @@ def create_loss(
         
         # Add embedding_dim to component config
         comp_config['input_dim'] = embedding_dim
+        
+        # Add default projector params if not specified
+        if comp_name == 'projector':
+            comp_config.setdefault('hidden_dim', config.get('projector_hidden_dim', 2048))
+            comp_config.setdefault('output_dim', config.get('projector_output_dim', 128))
+            comp_config.setdefault('num_layers', config.get('projector_num_layers', 2))
         
         # Instantiate component
         components[comp_name] = comp_class(**comp_config)

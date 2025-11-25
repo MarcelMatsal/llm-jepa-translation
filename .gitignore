@@ -24,3 +24,5 @@ __pycache__
 *.pyc
 
 analysis_output/*
+
+ssl_cookbook.pdf

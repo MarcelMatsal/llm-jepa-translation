@@ -4,9 +4,9 @@
 #SBATCH --error=logs/training_error_%j.log
 #SBATCH --time=24:00:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=192G
+#SBATCH --gres=gpu:2
 #SBATCH --partition=gpu
 
 # Print job information
@@ -24,6 +24,9 @@ cd /users/tgillin/files/llm-jepa-translation
 # Activate virtual environment
 echo "Activating virtual environment..."
 source venv/bin/activate
+
+# Set PyTorch memory allocator to prevent fragmentation
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Set up Weights & Biases API key
 if [ -f ~/.wandb_api_key ]; then

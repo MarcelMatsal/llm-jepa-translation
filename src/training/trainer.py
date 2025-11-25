@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 from typing import Dict, Optional, List
 import os
@@ -13,6 +14,45 @@ import json
 import shutil
 import wandb
 from huggingface_hub import HfApi, create_repo
+
+
+def compute_rankme(embeddings: torch.Tensor) -> float:
+    """
+    Compute RankMe (effective rank) of embeddings.
+    
+    RankMe is an unsupervised metric for assessing the quality of self-supervised
+    representations by measuring their effective rank. Higher rank indicates better
+    utilization of the embedding space, while low rank suggests representation collapse.
+    
+    Reference: "RankMe: Assessing the downstream performance of pretrained 
+    self-supervised representations by their rank" (arXiv:2210.02885)
+    
+    Args:
+        embeddings: (N, d) tensor of embeddings where N is number of samples
+                   and d is embedding dimension
+    
+    Returns:
+        Effective rank (scalar). Maximum possible value is min(N, d).
+        Higher values indicate better representation quality.
+    """
+    # Compute SVD to get singular values
+    # We only need singular values, not U and V matrices
+    try:
+        _, S, _ = torch.svd(embeddings)
+    except RuntimeError:
+        # Fallback if SVD fails (e.g., for very large matrices)
+        # Use a more stable but slower method
+        S = torch.linalg.svdvals(embeddings)
+    
+    # Normalize singular values to get a probability distribution
+    p = (S / S.sum()) + 1e-10  # Add small epsilon for numerical stability
+    
+    # Compute Shannon entropy of the singular value distribution
+    entropy = -(p * torch.log(p)).sum()
+    
+    # Effective rank is exp(entropy)
+    # This gives a measure between 1 (completely collapsed) and min(N, d) (full rank)
+    return torch.exp(entropy).item()
 
 
 class DualObjectiveTrainer:
@@ -34,6 +74,8 @@ class DualObjectiveTrainer:
         save_dir: str = './checkpoints',
         accumulation_steps: int = 1,
         use_wandb: bool = True,
+        use_amp: bool = True,
+        use_gradient_checkpointing: bool = True,
         tokenizer = None,
         hub_model_id: Optional[str] = None,
         push_to_hub: bool = False,
@@ -52,6 +94,8 @@ class DualObjectiveTrainer:
             save_dir: Directory to save checkpoints (local)
             accumulation_steps: Gradient accumulation steps
             use_wandb: Whether to log to Weights & Biases
+            use_amp: Use automatic mixed precision (FP16) for memory efficiency
+            use_gradient_checkpointing: Enable gradient checkpointing to save memory
             tokenizer: Tokenizer to save with model checkpoints (optional but recommended)
             hub_model_id: HuggingFace Hub model ID (e.g., 'username/model-name')
             push_to_hub: Whether to push checkpoints to HuggingFace Hub
@@ -67,10 +111,26 @@ class DualObjectiveTrainer:
         self.save_dir = os.path.abspath(save_dir)
         self.accumulation_steps = accumulation_steps
         self.use_wandb = use_wandb
+        self.use_amp = use_amp
+        self.use_gradient_checkpointing = use_gradient_checkpointing
         self.tokenizer = tokenizer
         self.hub_model_id = hub_model_id
         self.push_to_hub = push_to_hub
         self.experiment_metadata = experiment_metadata or {}
+        
+        # Enable gradient checkpointing if requested
+        if self.use_gradient_checkpointing:
+            if hasattr(self.model, 'gradient_checkpointing_enable'):
+                self.model.gradient_checkpointing_enable()
+                print("✓ Gradient checkpointing enabled")
+            elif hasattr(self.model.mlm_model, 'gradient_checkpointing_enable'):
+                self.model.mlm_model.gradient_checkpointing_enable()
+                print("✓ Gradient checkpointing enabled on MLM model")
+        
+        # Initialize GradScaler for mixed precision
+        self.scaler = GradScaler() if self.use_amp else None
+        if self.use_amp:
+            print("✓ Automatic Mixed Precision (AMP) enabled")
         
         # Create save directory
         os.makedirs(self.save_dir, exist_ok=True)
@@ -125,37 +185,61 @@ class DualObjectiveTrainer:
             batch = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v 
                     for k, v in batch.items()}
             
-            # Compute loss
-            loss, metrics = self.model.compute_total_loss(batch)
+            # Mixed precision forward pass
+            if self.use_amp:
+                with autocast():
+                    loss, metrics = self.model.compute_total_loss(batch)
+                    # Normalize loss for gradient accumulation
+                    loss = loss / self.accumulation_steps
+            else:
+                loss, metrics = self.model.compute_total_loss(batch)
+                # Normalize loss for gradient accumulation
+                loss = loss / self.accumulation_steps
             
-            # Normalize loss for gradient accumulation
-            loss = loss / self.accumulation_steps
+            # Backward pass with gradient scaling
+            if self.use_amp:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
             
-            # Backward pass
-            loss.backward()
-            
-            # Accumulate metrics
+            # Accumulate metrics (detach to avoid keeping computation graph)
             for key, value in metrics.items():
+                if isinstance(value, torch.Tensor):
+                    value = value.detach().item()
                 total_metrics[key] = total_metrics.get(key, 0.0) + value
             num_batches += 1
             
+            # Free memory from batch
+            del batch, loss, metrics
+            
+            # Clear CUDA cache periodically to prevent fragmentation
+            if (batch_idx + 1) % 50 == 0:
+                torch.cuda.empty_cache()
+            
             # Update weights (every accumulation_steps)
             if (batch_idx + 1) % self.accumulation_steps == 0:
-                # Gradient clipping
+                # Gradient clipping (unscale first if using AMP)
+                if self.use_amp:
+                    self.scaler.unscale_(self.optimizer)
+                
                 torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(),
                     self.max_grad_norm
                 )
                 
-                # Optimizer step
-                self.optimizer.step()
+                # Optimizer step with gradient scaling
+                if self.use_amp:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
                 
                 # Scheduler step
                 if self.scheduler is not None:
                     self.scheduler.step()
                 
-                # Zero gradients
-                self.optimizer.zero_grad()
+                # Zero gradients (set_to_none=True for better memory efficiency)
+                self.optimizer.zero_grad(set_to_none=True)
                 
                 self.global_step += 1
                 
@@ -262,6 +346,24 @@ class DualObjectiveTrainer:
         all_cls2 = torch.cat(all_cls2, dim=0)  # (N, d_model)
         
         N = all_cls1.shape[0]
+        d_model = all_cls1.shape[1]
+        
+        # Compute RankMe for both CLS token sets
+        # RankMe measures the effective rank of representations
+        # Higher values (closer to d_model) indicate better representation quality
+        # Low values suggest representation collapse
+        rankme_cls1 = compute_rankme(all_cls1)
+        rankme_cls2 = compute_rankme(all_cls2)
+        
+        # Add RankMe metrics
+        avg_metrics['rankme_cls1'] = rankme_cls1
+        avg_metrics['rankme_cls2'] = rankme_cls2
+        avg_metrics['rankme_mean'] = (rankme_cls1 + rankme_cls2) / 2
+        # Normalized RankMe (as percentage of maximum possible rank)
+        max_rank = min(N, d_model)
+        avg_metrics['rankme_cls1_normalized'] = rankme_cls1 / max_rank
+        avg_metrics['rankme_cls2_normalized'] = rankme_cls2 / max_rank
+        avg_metrics['rankme_mean_normalized'] = ((rankme_cls1 + rankme_cls2) / 2) / max_rank
         
         # Compute positive pair similarity (already in avg_metrics as cls_cosine_sim)
         positive_sim = avg_metrics.get('cls_cosine_sim', 0.0)
@@ -366,6 +468,10 @@ class DualObjectiveTrainer:
                 print(f"  Val CLS Similarity - Positive: {val_metrics.get('cls_cosine_sim_positive', 0.0):.4f}, "
                       f"Negative: {val_metrics.get('cls_cosine_sim_negative', 0.0):.4f}, "
                       f"Gap: {val_metrics.get('cls_cosine_sim_gap', 0.0):.4f}")
+                print(f"  Val RankMe - CLS1: {val_metrics.get('rankme_cls1', 0.0):.2f}, "
+                      f"CLS2: {val_metrics.get('rankme_cls2', 0.0):.2f}, "
+                      f"Mean: {val_metrics.get('rankme_mean', 0.0):.2f} "
+                      f"({val_metrics.get('rankme_mean_normalized', 0.0):.1%} of max)")
             
             
             # Save history
@@ -396,7 +502,11 @@ class DualObjectiveTrainer:
                         'epoch/val_cls_similarity_positive': val_metrics.get('cls_cosine_sim_positive', 0.0),
                         'epoch/val_cls_similarity_negative': val_metrics.get('cls_cosine_sim_negative', 0.0),
                         'epoch/val_cls_similarity_gap': val_metrics.get('cls_cosine_sim_gap', 0.0),
-                        'epoch/val_cls_similarity_ratio': val_metrics.get('cls_cosine_sim_ratio', 0.0)
+                        'epoch/val_cls_similarity_ratio': val_metrics.get('cls_cosine_sim_ratio', 0.0),
+                        'epoch/val_rankme_cls1': val_metrics.get('rankme_cls1', 0.0),
+                        'epoch/val_rankme_cls2': val_metrics.get('rankme_cls2', 0.0),
+                        'epoch/val_rankme_mean': val_metrics.get('rankme_mean', 0.0),
+                        'epoch/val_rankme_mean_normalized': val_metrics.get('rankme_mean_normalized', 0.0)
                     })
                 
                 wandb.log(epoch_summary, step=self.global_step)
