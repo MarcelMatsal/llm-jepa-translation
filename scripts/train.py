@@ -92,14 +92,16 @@ def main(args):
     train_collator = DualObjectiveCollator(
         tokenizer=tokenizer,
         mlm_probability=config['model']['mlm_probability'],
-        max_length=config['data']['max_length']
+        max_length=config['data']['max_length'],
+        mlm_strategy=config['model'].get('mlm_strategy', 'monolingual')
     )
     
     # Use same collator for validation (needed for compute_total_loss)
     val_collator = DualObjectiveCollator(
         tokenizer=tokenizer,
         mlm_probability=config['model']['mlm_probability'],
-        max_length=config['data']['max_length']
+        max_length=config['data']['max_length'],
+        mlm_strategy=config['model'].get('mlm_strategy', 'monolingual')
     ) if val_dataset is not None else None
     
     # Create data loaders

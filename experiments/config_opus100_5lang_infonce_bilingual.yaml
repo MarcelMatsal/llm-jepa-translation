@@ -1,14 +1,15 @@
-# OPUS-100 Training Configuration - 5 Language Pairs with InfoNCE
+# OPUS-100 Training Configuration - 5 Language Pairs with InfoNCE (Bilingual MLM)
 # Using InfoNCE (Information Noise-Contrastive Estimation) for alignment
+# Using Bilingual MLM strategy (concatenated sequences)
 
 # Experiment metadata
-experiment_name: "opus100-5lang-infonce"
-description: "Training with 5 diverse language pairs using InfoNCE contrastive loss to prevent collapse"
+experiment_name: "opus100-5lang-infonce-bilingual"
+description: "Training with 5 diverse language pairs using InfoNCE contrastive loss and Bilingual MLM strategy"
 
 # Model configuration
 model:
   base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
-  lambda_alignment: 0.1  # Weight for alignment loss vs MLM
+  lambda_alignment: 1.0  # Weight for alignment loss vs MLM
   
   # InfoNCE alignment loss configuration
   alignment_loss:
@@ -25,6 +26,11 @@ model:
     projector_num_layers: 2      # Number of layers (2 or 3)
   
   mlm_probability: 0.15  # Masking probability for standard MLM
+  
+  # MLM Strategy
+  # 'monolingual': Mask each language separately (matches inference, cleaner separation)
+  # 'bilingual': Mask both languages together (XLM-TLM style, more alignment signal)
+  mlm_strategy: "bilingual"
 
 # Dataset configuration - OPUS-100
 data:
@@ -59,9 +65,9 @@ training:
 
 # Output configuration
 output:
-  save_dir: "./experiments/opus100_5lang_infonce/checkpoints"
+  save_dir: "./experiments/opus100_5lang_infonce_bilingual/checkpoints"
   device: "cuda"  # 'cuda' or 'cpu'
-  hub_model_base: "maktzgls/bert-jepa-infonce"  # HuggingFace Hub model name base
+  hub_model_base: "maktzgls/bert-jepa-infonce-bilingual"  # HuggingFace Hub model name base
   push_to_hub: true  # Set to true to push to HuggingFace Hub
 
 # Evaluation configuration
@@ -76,6 +82,6 @@ wandb:
   enabled: true
   entity: "makt_zgls"
   project: "llm-jepa-translation"
-  run_name: "opus100-5lang-infonce"
-  tags: ["opus-100", "xlm-roberta-base", "5-languages", "infonce", "contrastive", "collapse-prevention"]
-  notes: "Training with OPUS-100: 5 diverse language pairs using InfoNCE contrastive loss. InfoNCE adds negative term to prevent CLS token collapse by pushing non-matching pairs apart."
+  run_name: "opus100-5lang-infonce-bilingual"
+  tags: ["opus-100", "xlm-roberta-base", "5-languages", "infonce", "contrastive", "collapse-prevention", "bilingual-mlm"]
+  notes: "Training with OPUS-100: 5 diverse language pairs using InfoNCE contrastive loss and Bilingual MLM strategy."

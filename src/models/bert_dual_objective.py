@@ -190,35 +190,50 @@ class BertDualObjective(nn.Module):
     
     def compute_alignment_loss(
         self,
-        cls1_input_ids: torch.Tensor,
-        cls1_attention_mask: torch.Tensor,
-        cls1_positions: torch.Tensor,
-        cls2_input_ids: torch.Tensor,
-        cls2_attention_mask: torch.Tensor,
-        cls2_positions: torch.Tensor
+        lang1_input_ids: torch.Tensor,
+        lang1_attention_mask: torch.Tensor,
+        lang2_input_ids: torch.Tensor,
+        lang2_attention_mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Dict[str, float]]:
         """
         Compute CLS alignment loss between two language representations.
         
+        FIX FOR COLLAPSE: Now uses clean, unmasked monolingual inputs instead of
+        masked inputs. Each language is encoded separately, and CLS is extracted
+        from position 0 (always the CLS token in monolingual encoding).
+        
         Args:
-            cls1_input_ids: Input with lang2 masked (to extract CLS1)
-            cls1_attention_mask: Attention mask for cls1
-            cls1_positions: Positions to extract CLS1 (should be first CLS, position 0)
-            cls2_input_ids: Input with lang1 masked (to extract CLS2)
-            cls2_attention_mask: Attention mask for cls2
-            cls2_positions: Positions to extract CLS2 (should be second CLS)
+            lang1_input_ids: Clean unmasked lang1 input: [CLS] lang1 [SEP]
+            lang1_attention_mask: Attention mask for lang1
+            lang2_input_ids: Clean unmasked lang2 input: [CLS] lang2 [SEP]
+            lang2_attention_mask: Attention mask for lang2
         
         Returns:
             loss: Alignment loss
-            cls1: CLS embeddings for language 1
-            cls2: CLS embeddings for language 2
+            cls1: CLS embeddings for language 1 (batch_size, d_model)
+            cls2: CLS embeddings for language 2 (batch_size, d_model)
             metrics: Dictionary with metrics
         """
-        # Extract CLS embeddings
-        cls1 = self.extract_cls_embeddings(cls1_input_ids, cls1_attention_mask, cls1_positions)
-        cls2 = self.extract_cls_embeddings(cls2_input_ids, cls2_attention_mask, cls2_positions)
+        batch_size = lang1_input_ids.shape[0]
+        device = lang1_input_ids.device
         
-        # Compute alignment loss using the modular loss function
+        # Forward pass 1: Encode lang1 (clean, no masking)
+        outputs1 = self.base_model(
+            input_ids=lang1_input_ids,
+            attention_mask=lang1_attention_mask
+        )
+        # Extract CLS from position 0
+        cls1 = outputs1.last_hidden_state[:, 0, :]  # (batch_size, d_model)
+        
+        # Forward pass 2: Encode lang2 (clean, no masking)
+        outputs2 = self.base_model(
+            input_ids=lang2_input_ids,
+            attention_mask=lang2_attention_mask
+        )
+        # Extract CLS from position 0
+        cls2 = outputs2.last_hidden_state[:, 0, :]  # (batch_size, d_model)
+        
+        # Compute alignment loss using the modular loss function (e.g., InfoNCE)
         loss, metrics = self.alignment_loss_fn.compute(cls1, cls2)
         
         # Add standard metrics for monitoring
@@ -245,29 +260,42 @@ class BertDualObjective(nn.Module):
         
         Args:
             batch: Dictionary from DualObjectiveCollator containing:
-                - mlm_input_ids, mlm_attention_mask, mlm_labels
-                - cls1_input_ids, cls1_attention_mask, cls1_positions
-                - cls2_input_ids, cls2_attention_mask, cls2_positions
+                - lang1_input_ids, lang1_attention_mask: Clean lang1 for CLS1
+                - lang2_input_ids, lang2_attention_mask: Clean lang2 for CLS2
+                - mlm_input_ids, mlm_attention_mask, mlm_labels: For MLM loss
+                - mlm_strategy: 'monolingual' or 'bilingual'
+                - original_batch_size: Batch size before MLM processing
         
         Returns:
             total_loss: Combined loss
             metrics: Dictionary with all metrics
         """
         # Compute MLM loss
-        mlm_loss, mlm_metrics = self.compute_mlm_loss(
-            batch['mlm_input_ids'],
-            batch['mlm_attention_mask'],
-            batch['mlm_labels']
-        )
+        mlm_strategy = batch['mlm_strategy']
         
-        # Compute alignment loss
+        if mlm_strategy == 'monolingual':
+            # For monolingual MLM, batch contains both languages concatenated
+            # We process them together and average the loss
+            mlm_loss, mlm_metrics = self.compute_mlm_loss(
+                batch['mlm_input_ids'],
+                batch['mlm_attention_mask'],
+                batch['mlm_labels']
+            )
+            # MLM loss is already averaged across all examples (both langs)
+        else:  # bilingual
+            # For bilingual MLM, process the concatenated sequence
+            mlm_loss, mlm_metrics = self.compute_mlm_loss(
+                batch['mlm_input_ids'],
+                batch['mlm_attention_mask'],
+                batch['mlm_labels']
+            )
+        
+        # Compute alignment loss using clean monolingual inputs
         align_loss, cls1, cls2, align_metrics = self.compute_alignment_loss(
-            batch['cls1_input_ids'],
-            batch['cls1_attention_mask'],
-            batch['cls1_positions'],
-            batch['cls2_input_ids'],
-            batch['cls2_attention_mask'],
-            batch['cls2_positions']
+            batch['lang1_input_ids'],
+            batch['lang1_attention_mask'],
+            batch['lang2_input_ids'],
+            batch['lang2_attention_mask']
         )
         
         # Combine losses
@@ -278,11 +306,18 @@ class BertDualObjective(nn.Module):
             'total_loss': total_loss.item(),
             'mlm_loss': mlm_metrics['mlm_loss'],
             'mlm_accuracy': mlm_metrics['mlm_accuracy'],
-            'alignment_loss': align_metrics['alignment_loss'],
             'weighted_alignment_loss': (self.lambda_alignment * align_loss).item(),
             'cls_cosine_sim': align_metrics['cls_cosine_sim'],
-            'cls_euclidean_dist': align_metrics['cls_euclidean_dist']
+            'cls_euclidean_dist': align_metrics['cls_euclidean_dist'],
+            'mlm_strategy': mlm_strategy
         }
+        
+        # Add all alignment loss metrics (e.g., InfoNCE metrics)
+        # This includes: alignment_loss, positive_sim, negative_sim, 
+        # within_lang_neg_sim, cross_lang_neg_sim, contrastive_accuracy, etc.
+        for key, value in align_metrics.items():
+            if key not in metrics:  # Don't override existing keys
+                metrics[key] = value
         
         return total_loss, metrics
     

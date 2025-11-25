@@ -206,7 +206,10 @@ class DualObjectiveTrainer:
             for key, value in metrics.items():
                 if isinstance(value, torch.Tensor):
                     value = value.detach().item()
-                total_metrics[key] = total_metrics.get(key, 0.0) + value
+                
+                # Only accumulate numeric values
+                if isinstance(value, (int, float)):
+                    total_metrics[key] = total_metrics.get(key, 0.0) + value
             num_batches += 1
             
             # Free memory from batch
@@ -309,17 +312,18 @@ class DualObjectiveTrainer:
                         for k, v in batch.items()}
                 
                 # Compute loss and get CLS embeddings
-                # We need to extract CLS embeddings separately for negative pair analysis
-                cls1 = self.model.extract_cls_embeddings(
-                    batch['cls1_input_ids'],
-                    batch['cls1_attention_mask'],
-                    batch['cls1_positions']
+                # Extract CLS from clean monolingual inputs (position 0)
+                outputs1 = self.model.base_model(
+                    input_ids=batch['lang1_input_ids'],
+                    attention_mask=batch['lang1_attention_mask']
                 )
-                cls2 = self.model.extract_cls_embeddings(
-                    batch['cls2_input_ids'],
-                    batch['cls2_attention_mask'],
-                    batch['cls2_positions']
+                cls1 = outputs1.last_hidden_state[:, 0, :]  # CLS at position 0
+                
+                outputs2 = self.model.base_model(
+                    input_ids=batch['lang2_input_ids'],
+                    attention_mask=batch['lang2_attention_mask']
                 )
+                cls2 = outputs2.last_hidden_state[:, 0, :]  # CLS at position 0
                 
                 # Normalize embeddings
                 cls1_norm = F.normalize(cls1, p=2, dim=-1)
