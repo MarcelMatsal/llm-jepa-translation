@@ -1,0 +1,96 @@
+# OPUS-100 Training Configuration - 10 Language Pairs with InfoNCE (Bilingual MLM)
+# Using InfoNCE (Information Noise-Contrastive Estimation) for alignment
+# Using Bilingual MLM strategy (concatenated sequences)
+
+# Experiment metadata
+experiment_name: "opus100-15lang-infonce-bilingual"
+description: "Training with 15 diverse language pairs using InfoNCE contrastive loss and Bilingual MLM strategy"
+
+# Model configuration
+model:
+  base_model: "xlm-roberta-base"  # Pre-trained XLM-RoBERTa
+  lambda_alignment: 1.0  # Weight for alignment loss vs MLM
+  
+  # InfoNCE alignment loss configuration
+  alignment_loss:
+    type: "infonce"  # Information Noise-Contrastive Estimation
+    
+    # InfoNCE-specific parameters
+    temperature: 0.07        # Temperature scaling (lower = harder negatives)
+    normalize: true          # L2 normalize embeddings (for cosine similarity)
+    use_projector: false     # Optional MLP projector (+20% performance boost)
+    
+    # Projector parameters (if use_projector=true)
+    projector_hidden_dim: 2048   # Hidden layer dimension
+    projector_output_dim: 128    # Projection space dimension
+    projector_num_layers: 2      # Number of layers (2 or 3)
+  
+  mlm_probability: 0.15  # Masking probability for standard MLM
+  
+  # MLM Strategy
+  # 'monolingual': Mask each language separately (matches inference, cleaner separation)
+  # 'bilingual': Mask both languages together (XLM-TLM style, more alignment signal)
+  mlm_strategy: "bilingual"
+
+# Dataset configuration - OPUS-100
+data:
+  lang_pairs: 
+    - "de-en"      # German-English
+    - "en-fr"      # French-English
+    - "en-es"      # Spanish-English
+    - "el-en"      # Greek-English
+    - "bg-en"      # Bulgarian-English
+    - "en-ru"      # Russian-English
+    - "en-tr"      # Turkish-English
+    - "ar-en"      # Arabic-English
+    - "en-vi"      # Vietnamese-English
+    - "en-th"      # Thai-English
+    - "en-zh"      # Chinese-English
+    - "en-hi"      # Hindi-English
+    - "en-sw"      # Swahili-English
+    - "en-ur"      # Urdu-English
+
+  batch_size: 16  # Reduced from 64 to prevent OOM (GPU memory constraint)
+  max_length: 256  # Maximum sequence length after tokenization
+  num_workers: 4  # DataLoader workers
+  
+  # Load 10k examples per pair = 50k total training examples
+  max_examples_per_pair: 10000
+  
+  # Text filtering (applied BEFORE counting towards max_examples_per_pair)
+  min_text_length: 10   # Minimum characters per text
+  max_text_length: 500  # Maximum characters per text
+
+# Training configuration
+training:
+  epochs: 10
+  learning_rate: 0.00002  # 2e-5, standard for fine-tuning
+  weight_decay: 0.01  # AdamW weight decay
+  warmup_steps: 500  # Linear warmup steps
+  max_grad_norm: 1.0  # Gradient clipping norm
+  log_interval: 100  # Log every 100 steps
+  save_every: 2  # Save checkpoint every 2 epochs
+  accumulation_steps: 4  # Accumulate 4 steps = effective batch size 64
+
+# Output configuration
+output:
+  save_dir: "./experiments/opus100_15lang_infonce_bilingual/checkpoints"
+  device: "cuda"  # 'cuda' or 'cpu'
+  hub_model_base: "maktzgls/bert-jepa-infonce-bilingual-15lang"  # HuggingFace Hub model name base
+  push_to_hub: true  # Set to true to push to HuggingFace Hub
+
+# Evaluation configuration
+evaluation:
+  eval_lang_pairs: ["de-en", "en-fr", "en-es", "el-en", "bg-en", "en-ru", "en-tr", "ar-en", "en-vi", "en-th", "en-zh", "en-hi", "en-sw", "en-ur"]
+  eval_batch_size: 64
+  num_eval_batches: 10
+  retrieval_top_k: [1, 5, 10]
+
+# Weights & Biases configuration
+wandb:
+  enabled: true
+  entity: "makt_zgls"
+  project: "llm-jepa-translation"
+  run_name: "opus100-15lang-infonce-bilingual"
+  tags: ["opus-100", "xlm-roberta-base", "15-languages", "infonce", "contrastive", "collapse-prevention", "bilingual-mlm"]
+  notes: "Training with OPUS-100: 15 diverse language pairs using InfoNCE contrastive loss and Bilingual MLM strategy."

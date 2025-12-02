@@ -336,9 +336,10 @@ class DualObjectiveTrainer:
                 # Compute loss using the model's method
                 loss, metrics = self.model.compute_total_loss(batch)
                 
-                # Accumulate metrics
+                # Accumulate metrics (only numeric values)
                 for key, value in metrics.items():
-                    total_metrics[key] = total_metrics.get(key, 0.0) + value
+                    if isinstance(value, (int, float)):
+                        total_metrics[key] = total_metrics.get(key, 0.0) + value
                 num_batches += 1
         
         # Compute averages
