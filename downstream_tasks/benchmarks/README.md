@@ -7,12 +7,14 @@ Simple benchmarking system using HuggingFace's built-in infrastructure to evalua
 ```
 benchmarks/
 ├── benchmark_seq_class.py    # SST-2 sentiment analysis
-├── benchmark_ner.py           # CoNLL-2003 NER
-├── benchmark_qa.py            # SQuAD v1.1 QA
-├── benchmark_mc.py            # SWAG multiple choice
-├── run_all_benchmarks.sh      # Run all 4 tasks
-├── run_benchmark_job.sh       # SLURM submission script
-└── README.md                  # This file
+├── benchmark_ner.py          # CoNLL-2003 NER
+├── benchmark_qa.py           # SQuAD v1.1 QA
+├── benchmark_mc.py           # SWAG multiple choice
+├── benchmark_mlqa.py         # MLQA cross-lingual QA (paper benchmark)
+├── run_all_benchmarks.sh     # Run all tasks
+├── run_mlqa_benchmark.sh     # SLURM script for MLQA
+├── run_benchmark_job.sh      # SLURM submission script
+└── README.md                 # This file
 ```
 
 ## Quick Start
@@ -25,9 +27,14 @@ bash run_all_benchmarks.sh xlm-roberta-base
 ```
 
 This will:
-1. Run all 4 benchmarks sequentially
+1. Run all 4 standard benchmarks sequentially
 2. Save results to `benchmark_results.csv`
 3. Display summary at the end
+
+To also run MLQA (takes longer):
+```bash
+bash run_all_benchmarks.sh xlm-roberta-base true
+```
 
 ### Submit to SLURM
 
@@ -55,6 +62,9 @@ python benchmark_qa.py --model xlm-roberta-base
 
 # Multiple choice (SWAG - default)
 python benchmark_mc.py --model xlm-roberta-base
+
+# MLQA cross-lingual QA
+python benchmark_mlqa.py --model xlm-roberta-base --languages all --cross_lingual
 ```
 
 ### Customize Dataset and Hyperparameters
@@ -143,6 +153,96 @@ cat benchmark_results.csv
 - **Epochs**: 3
 - **Batch size**: 8
 
+### MLQA (Cross-lingual QA)
+- **Dataset**: MLQA (facebook/mlqa)
+- **Paper**: [MLQA: Evaluating Cross-lingual Extractive Question Answering](https://arxiv.org/abs/1910.07475)
+- **Metrics**: F1 Score, Exact Match (EM)
+- **Languages**: English, Arabic, German, Spanish, Hindi, Vietnamese, Chinese
+- **Methodology**: Train on SQuAD v1.1 (English), evaluate zero-shot on MLQA
+
+## MLQA Benchmark
+
+The MLQA benchmark implements the evaluation methodology from the original paper (Lewis et al., 2019).
+
+### Usage
+
+**Quick run (English only):**
+```bash
+python benchmark_mlqa.py --model xlm-roberta-base --languages en
+```
+
+**Full evaluation (all languages):**
+```bash
+python benchmark_mlqa.py \
+    --model xlm-roberta-base \
+    --languages all \
+    --cross_lingual \
+    --output_csv mlqa_results.csv
+```
+
+**Submit via SLURM:**
+```bash
+# Standard model
+sbatch run_mlqa_benchmark.sh xlm-roberta-base
+
+# Custom model on HuggingFace Hub
+sbatch run_mlqa_benchmark.sh your-org/your-custom-model
+```
+
+### MLQA Arguments
+
+- `--model`: HuggingFace model name or Hub repo
+- `--train_epochs`: Training epochs on SQuAD (default: 2)
+- `--languages`: Languages to evaluate: 'all' or comma-separated (e.g., 'en,de,es')
+- `--cross_lingual`: Also evaluate cross-lingual pairs (English context, other-lang questions)
+- `--skip_training`: Skip SQuAD training (use pre-trained QA model directly)
+- `--output_csv`: Output CSV file
+
+### MLQA Output Format
+
+Results are saved to CSV with detailed language pair information:
+
+```csv
+model,task,context_lang,question_lang,f1,em,num_examples
+xlm-roberta-base,mlqa_en_en,en,en,65.32,47.89,5495
+xlm-roberta-base,mlqa_de_de,de,de,49.28,32.45,4517
+xlm-roberta-base,mlqa_en_de,en,de,52.14,35.67,4517
+...
+```
+
+### Comparing with Paper Results
+
+The paper reports F1/EM scores for XLM-R base on MLQA (Table 2):
+
+| Language | F1 | EM |
+|----------|----|----|
+| en | 77.4 | 64.6 |
+| de | 60.6 | 44.5 |
+| es | 66.5 | 47.7 |
+| ar | 52.4 | 35.3 |
+| hi | 58.5 | 43.3 |
+| vi | 62.0 | 43.6 |
+| zh | 56.4 | 37.3 |
+
+Note: Results may vary slightly based on training configuration and random seed.
+
+## Custom Models
+
+Both standard HuggingFace models and custom models work the same way:
+
+```bash
+# Standard model
+python benchmark_mlqa.py --model xlm-roberta-base
+
+# Custom model on HuggingFace Hub
+python benchmark_mlqa.py --model your-org/your-custom-model
+
+# Local checkpoint
+python benchmark_mlqa.py --model ./path/to/checkpoint
+```
+
+Custom models (like BertDualObjective) work because they save the base XLM-RoBERTa weights, which can be loaded by `AutoModelForQuestionAnswering`.
+
 ## Requirements
 
 Make sure you have installed:
@@ -156,6 +256,7 @@ Key dependencies:
 - `evaluate>=0.4.0`
 - `seqeval>=1.2.2`
 - `pandas>=1.3.0`
+- `tqdm>=4.65.0`
 
 ## Notes
 
@@ -163,4 +264,4 @@ Key dependencies:
 - Results are saved to `results/<task>/` directories
 - Each benchmark can be run independently
 - CSV format makes it easy to compare models
-
+- MLQA evaluation follows the paper's zero-shot transfer methodology

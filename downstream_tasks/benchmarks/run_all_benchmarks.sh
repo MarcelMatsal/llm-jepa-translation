@@ -1,18 +1,20 @@
 #!/bin/bash
-# Run all 4 benchmarks and consolidate results
+# Run all 5 benchmarks and consolidate results
 
 cd "$(dirname "$0")"
 
 MODEL="${1:-xlm-roberta-base}"
 OUTPUT_CSV="benchmark_results.csv"
+MLQA_CSV="mlqa_results.csv"
+RUN_MLQA="${2:-false}"  # Set to 'true' to include MLQA (takes longer)
 
-echo "Running all benchmarks with model: $MODEL"
+echo "Running benchmarks with model: $MODEL"
 echo ""
 
 # Initialize CSV with header
 echo "model,task,metric,value" > $OUTPUT_CSV
 
-# Run all benchmarks
+# Run standard benchmarks
 echo "1/4 Running SST-2 (Sequence Classification)..."
 python benchmark_seq_class.py --model $MODEL --output_csv $OUTPUT_CSV
 
@@ -30,10 +32,33 @@ python benchmark_mc.py --model $MODEL --output_csv $OUTPUT_CSV
 
 echo ""
 echo "=========================================="
-echo "All benchmarks completed!"
+echo "Standard benchmarks completed!"
 echo "=========================================="
 echo ""
 cat $OUTPUT_CSV
 echo ""
 echo "Results saved to $OUTPUT_CSV"
+
+# Optionally run MLQA (cross-lingual QA)
+if [ "$RUN_MLQA" = "true" ]; then
+    echo ""
+    echo "=========================================="
+    echo "5/5 Running MLQA (Cross-lingual QA)..."
+    echo "=========================================="
+    echo "Note: MLQA takes longer as it trains on SQuAD and evaluates on 7 languages"
+    echo ""
+    python benchmark_mlqa.py \
+        --model $MODEL \
+        --languages all \
+        --cross_lingual \
+        --output_csv $MLQA_CSV
+    
+    echo ""
+    echo "MLQA results saved to $MLQA_CSV"
+fi
+
+echo ""
+echo "=========================================="
+echo "All benchmarks completed!"
+echo "=========================================="
 

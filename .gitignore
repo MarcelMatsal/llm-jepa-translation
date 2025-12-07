@@ -16,6 +16,8 @@ logs/*
 checkpoints*
 
 
+results/*
+
 
 
 __pycache__/*

@@ -1,0 +1,14 @@
+model,task,context_lang,question_lang,f1,em,num_examples
+xlm-roberta-base,mlqa_en_en,en,en,-1,-1,0
+xlm-roberta-base,mlqa_ar_ar,ar,ar,-1,-1,0
+xlm-roberta-base,mlqa_de_de,de,de,-1,-1,0
+xlm-roberta-base,mlqa_es_es,es,es,-1,-1,0
+xlm-roberta-base,mlqa_hi_hi,hi,hi,-1,-1,0
+xlm-roberta-base,mlqa_vi_vi,vi,vi,-1,-1,0
+xlm-roberta-base,mlqa_zh_zh,zh,zh,-1,-1,0
+xlm-roberta-base,mlqa_en_ar,en,ar,-1,-1,0
+xlm-roberta-base,mlqa_en_de,en,de,-1,-1,0
+xlm-roberta-base,mlqa_en_es,en,es,-1,-1,0
+xlm-roberta-base,mlqa_en_hi,en,hi,-1,-1,0
+xlm-roberta-base,mlqa_en_vi,en,vi,-1,-1,0
+xlm-roberta-base,mlqa_en_zh,en,zh,-1,-1,0

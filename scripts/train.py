@@ -64,25 +64,32 @@ def main(args):
     print("Loading Datasets")
     print("="*80)
     
+    # Get dataset source (default to 'opus100' for backward compatibility)
+    dataset_source = config['data'].get('dataset_source', 'opus100')
+    train_split = config['data'].get('train_split', 'train')
+    
     train_dataset = load_multilingual_dataset(
         lang_pairs=config['data']['lang_pairs'],
-        split='train',
+        split=train_split,
         max_examples_per_pair=config['data'].get('max_examples_per_pair'),
         min_length=config['data'].get('min_text_length', 10),
-        max_length=config['data'].get('max_text_length', 500)
+        max_length=config['data'].get('max_text_length', 500),
+        dataset_source=dataset_source
     )
     
     print(f"\nTotal training examples: {len(train_dataset)}")
     
     # Create validation dataset (if available)
     val_dataset = None
+    val_split = config['data'].get('val_split', 'validation')
     try:
         val_dataset = load_multilingual_dataset(
             lang_pairs=config['data']['lang_pairs'],
-            split='validation',
+            split=val_split,
             max_examples_per_pair=1000,  # Limit validation size
             min_length=config['data'].get('min_text_length', 10),
-            max_length=config['data'].get('max_text_length', 500)
+            max_length=config['data'].get('max_text_length', 500),
+            dataset_source=dataset_source
         )
         print(f"Total validation examples: {len(val_dataset)}")
     except Exception as e:

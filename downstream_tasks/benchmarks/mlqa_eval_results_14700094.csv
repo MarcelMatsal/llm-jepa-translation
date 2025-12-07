@@ -1,0 +1,14 @@
+model,task,context_lang,question_lang,f1,em,num_examples
+xlm-roberta-base,mlqa_en_en,en,en,80.93863179997952,68.213977566868,11590
+xlm-roberta-base,mlqa_ar_ar,ar,ar,54.957958200042775,35.876288659793815,5335
+xlm-roberta-base,mlqa_de_de,de,de,62.42352799270936,46.80097409785256,4517
+xlm-roberta-base,mlqa_es_es,es,es,66.81400394307896,45.783361888444695,5253
+xlm-roberta-base,mlqa_hi_hi,hi,hi,61.65387670475852,44.04229361529077,4918
+xlm-roberta-base,mlqa_vi_vi,vi,vi,67.44716760178879,47.024567788899,5495
+xlm-roberta-base,mlqa_zh_zh,zh,zh,40.26151308514556,39.61456102783726,5137
+xlm-roberta-base,mlqa_en_ar,en,ar,31.006757533554858,19.194001874414244,5335
+xlm-roberta-base,mlqa_en_de,en,de,60.61304361207661,46.00398494576046,4517
+xlm-roberta-base,mlqa_en_es,en,es,59.32749277196276,43.00399771559109,5253
+xlm-roberta-base,mlqa_en_hi,en,hi,42.13052193891832,29.056527043513622,4918
+xlm-roberta-base,mlqa_en_vi,en,vi,42.63553060464635,28.953594176524113,5495
+xlm-roberta-base,mlqa_en_zh,en,zh,37.15620736484091,24.683667510219973,5137
