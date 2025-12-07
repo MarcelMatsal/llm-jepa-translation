@@ -38,10 +38,11 @@ data:
   # Dataset source: 'flores' or 'opus100'
   dataset_source: "flores"
   
-  # FLORES splits: 'dev' (997), 'devtest' (1012), or 'all' (~2009)
-  # For training, we use 'all' to maximize available data
-  train_split: "all"      # Use both dev and devtest for training
-  val_split: "devtest"    # Use devtest for validation (overlaps with training)
+  # FLORES data is loaded completely and split into train/validation/test
+  # matching OPUS-100 style: 80% train, 10% validation, 10% test
+  # Use 'train', 'validation', 'test', or 'all'
+  train_split: "train"       # 80% of data (~1607 examples per pair)
+  val_split: "validation"    # 10% of data (~201 examples per pair)
   
   lang_pairs: 
     - "de-en"      # German-English
